@@ -1,0 +1,9 @@
+# Harrington IT Security Contact
+# RFC 9116
+
+Contact: mailto:support@harringtonit.com
+Contact: tel:+1-509-393-7287
+
+Canonical: https://harringtonit.com/.well-known/security.txt
+Preferred-Languages: en
+Expires: 2027-07-13T00:00:00Z
