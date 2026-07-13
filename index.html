@@ -112,13 +112,14 @@
           <div class="contact-details"><a href="tel:+15093937287">(509) 393-7287</a><a href="mailto:support@harringtonit.com">support@harringtonit.com</a></div>
         </div>
         <form class="contact-form" data-contact-form>
-          <label>Name<input type="text" name="name" autocomplete="name" required></label>
-          <label>Business<input type="text" name="business" autocomplete="organization"></label>
-          <label>Email<input type="email" name="email" autocomplete="email" required></label>
-          <label>Phone<input type="tel" name="phone" autocomplete="tel"></label>
-          <label class="full-field">How can we help?<textarea name="message" rows="4" required></textarea></label>
+          <label>Name<input type="text" name="name" autocomplete="name" maxlength="120" required></label>
+          <label>Business<input type="text" name="business" autocomplete="organization" maxlength="160"></label>
+          <label>Email<input type="email" name="email" autocomplete="email" maxlength="254" required></label>
+          <label>Phone<input type="tel" name="phone" autocomplete="tel" maxlength="60"></label>
+          <label class="full-field">How can we help?<textarea name="message" rows="4" maxlength="4000" required></textarea></label>
+          <div class="sr-only" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           <button class="button full-field" type="submit">Send inquiry</button>
-          <p class="form-note full-field">This currently opens your email application. Direct form delivery is being added through Resend.</p>
+          <p class="form-note full-field" data-form-status aria-live="polite">Your message will be sent securely to support@harringtonit.com.</p>
         </form>
       </div>
     </section>
