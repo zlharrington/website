@@ -14,101 +14,151 @@
   });
 
   const clean = value => (value || '').trim();
-  const openMail = (recipient, subject, body) => {
-    window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  const sendForm = async (payload) => {
+    const response = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    let result = {};
+    try {
+      result = await response.json();
+    } catch {
+      result = {};
+    }
+
+    if (!response.ok || !result.ok) {
+      throw new Error(result.error || 'Your message could not be sent. Please try again.');
+    }
+  };
+
+  const setBusy = (button, busy, busyText) => {
+    if (!button) return;
+    if (busy) {
+      button.dataset.originalText = button.textContent;
+      button.textContent = busyText;
+      button.disabled = true;
+    } else {
+      button.textContent = button.dataset.originalText || button.textContent;
+      button.disabled = false;
+    }
   };
 
   const contactForm = document.querySelector('[data-contact-form]');
   if (contactForm) {
-    contactForm.addEventListener('submit', event => {
+    const button = contactForm.querySelector('button[type="submit"]');
+    const status = contactForm.querySelector('[data-form-status]');
+
+    contactForm.addEventListener('submit', async event => {
       event.preventDefault();
       if (!contactForm.reportValidity()) return;
+
       const data = new FormData(contactForm);
-      const name = clean(data.get('name'));
-      const business = clean(data.get('business'));
-      const email = clean(data.get('email'));
-      const phone = clean(data.get('phone'));
-      const message = clean(data.get('message'));
+      setBusy(button, true, 'Sending…');
+      if (status) status.textContent = 'Sending your message…';
 
-      const body = [
-        'NEW WEBSITE INQUIRY',
-        '-------------------',
-        `Name: ${name}`,
-        `Business: ${business || 'Not provided'}`,
-        `Email: ${email}`,
-        `Phone: ${phone || 'Not provided'}`,
-        '',
-        'How can Harrington IT help?',
-        message
-      ].join('\n');
-
-      openMail('support@harringtonit.com', `Website inquiry from ${business || name}`, body);
+      try {
+        await sendForm({
+          type: 'contact',
+          name: clean(data.get('name')),
+          business: clean(data.get('business')),
+          email: clean(data.get('email')),
+          phone: clean(data.get('phone')),
+          message: clean(data.get('message')),
+          website: clean(data.get('website')),
+        });
+        contactForm.reset();
+        if (status) status.textContent = 'Thank you. Your message has been sent.';
+      } catch (error) {
+        if (status) status.textContent = error.message;
+      } finally {
+        setBusy(button, false);
+      }
     });
   }
 
   const ticketForm = document.querySelector('[data-ticket-form]');
   const copyButton = document.querySelector('[data-copy-ticket]');
-  const status = document.querySelector('[data-ticket-status]');
+  const ticketStatus = document.querySelector('[data-ticket-status]');
 
   const buildTicket = () => {
     const data = new FormData(ticketForm);
-    const name = clean(data.get('name'));
-    const company = clean(data.get('company'));
-    const email = clean(data.get('email'));
-    const phone = clean(data.get('phone'));
-    const priority = clean(data.get('priority'));
-    const category = clean(data.get('category'));
-    const summary = clean(data.get('summary'));
-    const description = clean(data.get('description'));
-    const contactTime = clean(data.get('contact_time'));
+    const ticket = {
+      type: 'ticket',
+      name: clean(data.get('name')),
+      company: clean(data.get('company')),
+      email: clean(data.get('email')),
+      phone: clean(data.get('phone')),
+      priority: clean(data.get('priority')),
+      category: clean(data.get('category')),
+      summary: clean(data.get('summary')),
+      description: clean(data.get('description')),
+      contact_time: clean(data.get('contact_time')),
+      website: clean(data.get('website')),
+    };
 
-    const subject = `[${priority.split(' — ')[0] || 'Support'}] ${company} - ${summary}`;
+    const subject = `[${ticket.priority.split(' — ')[0] || 'Support'}] ${ticket.company} - ${ticket.summary}`;
     const body = [
       'HARRINGTON IT SUPPORT REQUEST',
       '-----------------------------',
-      `Name: ${name}`,
-      `Business: ${company}`,
-      `Email: ${email}`,
-      `Phone: ${phone || 'Not provided'}`,
-      `Priority: ${priority}`,
-      `Category: ${category}`,
-      `Best contact time: ${contactTime || 'Not provided'}`,
+      `Name: ${ticket.name}`,
+      `Business: ${ticket.company}`,
+      `Email: ${ticket.email}`,
+      `Phone: ${ticket.phone || 'Not provided'}`,
+      `Priority: ${ticket.priority}`,
+      `Category: ${ticket.category}`,
+      `Best contact time: ${ticket.contact_time || 'Not provided'}`,
       '',
       'SUMMARY',
-      summary,
+      ticket.summary,
       '',
       'DETAILS',
-      description
+      ticket.description,
     ].join('\n');
 
-    return { subject, body };
+    return { ticket, subject, body };
   };
 
   if (ticketForm) {
-    ticketForm.addEventListener('submit', event => {
+    const button = ticketForm.querySelector('button[type="submit"]');
+
+    ticketForm.addEventListener('submit', async event => {
       event.preventDefault();
       if (!ticketForm.reportValidity()) {
-        if (status) status.textContent = 'Please complete the required fields.';
+        if (ticketStatus) ticketStatus.textContent = 'Please complete the required fields.';
         return;
       }
-      const ticket = buildTicket();
-      if (status) status.textContent = 'Opening your email application…';
-      openMail('tickets@harringtonit.com', ticket.subject, ticket.body);
+
+      const { ticket } = buildTicket();
+      setBusy(button, true, 'Submitting…');
+      if (ticketStatus) ticketStatus.textContent = 'Submitting your support request…';
+
+      try {
+        await sendForm(ticket);
+        ticketForm.reset();
+        if (ticketStatus) ticketStatus.textContent = 'Your support request has been submitted.';
+      } catch (error) {
+        if (ticketStatus) ticketStatus.textContent = error.message;
+      } finally {
+        setBusy(button, false);
+      }
     });
   }
 
   if (copyButton) {
     copyButton.addEventListener('click', async () => {
       if (!ticketForm.reportValidity()) {
-        if (status) status.textContent = 'Please complete the required fields first.';
+        if (ticketStatus) ticketStatus.textContent = 'Please complete the required fields first.';
         return;
       }
-      const ticket = buildTicket();
+      const { subject, body } = buildTicket();
       try {
-        await navigator.clipboard.writeText(`Subject: ${ticket.subject}\n\n${ticket.body}`);
-        if (status) status.textContent = 'Ticket details copied.';
+        await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
+        if (ticketStatus) ticketStatus.textContent = 'Ticket details copied.';
       } catch {
-        if (status) status.textContent = 'Copying was blocked by the browser.';
+        if (ticketStatus) ticketStatus.textContent = 'Copying was blocked by the browser.';
       }
     });
   }
