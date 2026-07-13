@@ -14,8 +14,8 @@
   });
 
   const clean = value => (value || '').trim();
-  const openMail = (subject, body) => {
-    window.location.href = `mailto:support@harringtonit.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const openMail = (recipient, subject, body) => {
+    window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   const contactForm = document.querySelector('[data-contact-form]');
@@ -42,7 +42,7 @@
         message
       ].join('\n');
 
-      openMail(`Website inquiry from ${business || name}`, body);
+      openMail('support@harringtonit.com', `Website inquiry from ${business || name}`, body);
     });
   }
 
@@ -93,7 +93,7 @@
       }
       const ticket = buildTicket();
       if (status) status.textContent = 'Opening your email application…';
-      openMail(ticket.subject, ticket.body);
+      openMail('tickets@harringtonit.com', ticket.subject, ticket.body);
     });
   }
 
