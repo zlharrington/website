@@ -1,0 +1,17 @@
+{
+  "name": "Harrington IT",
+  "short_name": "Harrington IT",
+  "description": "Business Technology Solutions",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#14358f",
+  "icons": [
+    {
+      "src": "/assets/harrington-it-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
