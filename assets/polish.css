@@ -1,5 +1,9 @@
 /* Homepage refinement: concise content, strong hierarchy, minimal repetition */
 body{line-height:1.55}
+.site-header{background:rgba(255,255,255,.9);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-bottom:1px solid rgba(17,38,111,.08);box-shadow:0 8px 24px rgba(7,20,63,.06)}
+.nav-wrap{min-height:76px;transition:min-height .2s ease}
+.brand{width:205px;line-height:0}
+.brand img{width:100%;height:50px;object-fit:contain;object-position:left center;background:transparent}
 .hero-layout{grid-template-columns:minmax(0,1.08fr) minmax(320px,.72fr);gap:64px;min-height:590px;padding:70px 0}
 .hero-copy{max-width:720px}
 .hero-copy h1{font-size:clamp(3rem,5.4vw,4.75rem);max-width:800px;margin-bottom:20px}
@@ -53,6 +57,10 @@ body{line-height:1.55}
   .footer-contact{justify-items:center}
 }
 @media(max-width:680px){
+  .site-header{background:rgba(255,255,255,.95)}
+  .nav-wrap{min-height:68px}
+  .brand{width:165px}
+  .brand img{height:42px}
   .section{padding:64px 0}
   .hero-layout{padding:52px 0}
   .hero-copy h1{font-size:clamp(2.55rem,12vw,3.55rem)}
