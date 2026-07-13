@@ -30,7 +30,7 @@
       <div class="container">
         <div class="eyebrow">Client support</div>
         <h1>Submit a support ticket.</h1>
-        <p>Complete the form and your request will be prepared for <strong>tickets@harringtonit.com</strong>.</p>
+        <p>Complete the form and your request will be sent directly to <strong>tickets@harringtonit.com</strong>.</p>
       </div>
     </section>
 
@@ -42,10 +42,10 @@
             <p>Provide as much detail as possible so we can assist you efficiently.</p>
           </div>
           <div class="form-grid">
-            <label>Your name<input type="text" name="name" required></label>
-            <label>Business name<input type="text" name="company" required></label>
-            <label>Email address<input type="email" name="email" required></label>
-            <label>Phone number<input type="tel" name="phone"></label>
+            <label>Your name<input type="text" name="name" maxlength="120" required></label>
+            <label>Business name<input type="text" name="company" maxlength="160" required></label>
+            <label>Email address<input type="email" name="email" maxlength="254" required></label>
+            <label>Phone number<input type="tel" name="phone" maxlength="60"></label>
             <label>Priority
               <select name="priority" required>
                 <option value="">Select priority</option>
@@ -69,11 +69,12 @@
               </select>
             </label>
             <label class="full-field">Short summary<input type="text" name="summary" maxlength="120" required></label>
-            <label class="full-field">Detailed description<textarea name="description" rows="7" required></textarea></label>
-            <label class="full-field">Best time to contact you<input type="text" name="contact_time"></label>
+            <label class="full-field">Detailed description<textarea name="description" rows="7" maxlength="5000" required></textarea></label>
+            <label class="full-field">Best time to contact you<input type="text" name="contact_time" maxlength="160"></label>
+            <div class="sr-only" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           </div>
           <div class="ticket-actions">
-            <button class="button" type="submit">Prepare support email</button>
+            <button class="button" type="submit">Submit support ticket</button>
             <button class="button button-ghost" type="button" data-copy-ticket>Copy ticket details</button>
           </div>
           <div class="ticket-status" data-ticket-status aria-live="polite"></div>
