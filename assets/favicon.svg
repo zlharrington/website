@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Harrington IT">
+  <rect width="64" height="64" rx="12" fill="#07111f"/>
+  <path d="M14 16h18v5H19v22h13v5H14z" fill="#ffffff"/>
+  <path d="M38 16h5v32h-5zM46 16h14v5h-4.5v27h-5V21H46z" fill="#ffffff"/>
+  <rect x="23" y="52" width="18" height="4" rx="2" fill="#14358f"/>
+</svg>
