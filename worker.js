@@ -159,12 +159,10 @@ async function sendEmail(request, env) {
       return json({ ok: false, error: 'Please complete all required ticket fields.' }, 400);
     }
 
-    const reference = `HIT-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`;
     const priorityLabel = singleLine(priority.split(' — ')[0] || 'Support', 30);
     to = 'support@harringtonit.rmmservices.net';
-    subject = `[${reference}] ${priorityLabel} - ${company} - ${summary}`;
+    subject = `${priorityLabel} - ${company} - ${summary}`;
     html = `<h2>Harrington IT support request</h2>
-      <p><strong>Reference:</strong> ${reference}</p>
       <p><strong>Name:</strong> ${escapeHtml(name)}</p>
       <p><strong>Business:</strong> ${escapeHtml(company)}</p>
       <p><strong>Email:</strong> ${escapeHtml(email)}</p>
@@ -174,7 +172,7 @@ async function sendEmail(request, env) {
       <p><strong>Best contact time:</strong> ${escapeHtml(contactTime || 'Not provided')}</p>
       <hr><p><strong>Summary:</strong> ${escapeHtml(summary)}</p>
       <p><strong>Details:</strong></p><p style="white-space:pre-wrap">${escapeHtml(description)}</p>`;
-    text = `HARRINGTON IT SUPPORT REQUEST\nReference: ${reference}\n\nName: ${name}\nBusiness: ${company}\nEmail: ${email}\nPhone: ${phone || 'Not provided'}\nPriority: ${priority}\nCategory: ${category}\nBest contact time: ${contactTime || 'Not provided'}\n\nSUMMARY\n${summary}\n\nDETAILS\n${description}`;
+    text = `HARRINGTON IT SUPPORT REQUEST\n\nName: ${name}\nBusiness: ${company}\nEmail: ${email}\nPhone: ${phone || 'Not provided'}\nPriority: ${priority}\nCategory: ${category}\nBest contact time: ${contactTime || 'Not provided'}\n\nSUMMARY\n${summary}\n\nDETAILS\n${description}`;
   } else {
     return json({ ok: false, error: 'Unknown form type.' }, 400);
   }
