@@ -32,6 +32,8 @@
     if (!response.ok || !result.ok) {
       throw new Error(result.error || 'Your message could not be sent. Please try again.');
     }
+
+    return result;
   };
 
   const setBusy = (button, busy, busyText) => {
@@ -136,9 +138,14 @@
       if (ticketStatus) ticketStatus.textContent = 'Submitting your support request…';
 
       try {
-        await sendForm(ticket);
+        const result = await sendForm(ticket);
         ticketForm.reset();
-        if (ticketStatus) ticketStatus.textContent = 'Your support request has been submitted.';
+        if (ticketStatus) {
+          const routeDetails = result.recipient && result.build
+            ? ` Routed to ${result.recipient} via ${result.build}.`
+            : '';
+          ticketStatus.textContent = `Your support request has been submitted.${routeDetails}`;
+        }
       } catch (error) {
         if (ticketStatus) ticketStatus.textContent = error.message;
       } finally {
