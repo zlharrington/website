@@ -16,19 +16,9 @@ function allowedOrigin(request) {
   const allowedHosts = ['harringtonit.com', 'www.harringtonit.com'];
   const origin = request.headers.get('origin');
   if (origin) {
-    try {
-      return allowedHosts.includes(new URL(origin).hostname);
-    } catch {
-      return false;
-    }
+    try { return allowedHosts.includes(new URL(origin).hostname); } catch { return false; }
   }
-
-  // Same-origin browser GET requests often omit the Origin header.
-  try {
-    return allowedHosts.includes(new URL(request.url).hostname);
-  } catch {
-    return false;
-  }
+  try { return allowedHosts.includes(new URL(request.url).hostname); } catch { return false; }
 }
 
 function getNinjaBaseUrl(regionValue) {
@@ -56,7 +46,6 @@ async function getUserAccessToken(env) {
   }
   const baseUrl = getNinjaBaseUrl(env.NINJA_REGION);
   if (!baseUrl) return { error: 'NinjaOne region is invalid.', status: 400 };
-
   try {
     const response = await fetch(`${baseUrl}/ws/oauth/token`, {
       method: 'POST',
@@ -65,10 +54,7 @@ async function getUserAccessToken(env) {
         'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json',
       },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: env.NINJA_REFRESH_TOKEN,
-      }).toString(),
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: env.NINJA_REFRESH_TOKEN }).toString(),
     });
     const raw = await response.text();
     const result = parseTokenResponse(raw, response.headers.get('content-type') || '');
@@ -84,24 +70,16 @@ async function getUserAccessToken(env) {
 async function inspectAttributes(request, env) {
   if (!['GET', 'POST'].includes(request.method)) return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
-
   const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004`, {
-    method: 'GET',
-    headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
+    method: 'GET', headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
   });
   const raw = await response.text();
   let ticket = {};
-  try { ticket = JSON.parse(raw); } catch {
-    return json({ ok: false, status: response.status, error: 'NinjaOne returned invalid JSON.' }, 502);
-  }
-
+  try { ticket = JSON.parse(raw); } catch { return json({ ok: false, status: response.status, error: 'NinjaOne returned invalid JSON.' }, 502); }
   return json({
-    ok: response.ok,
-    readOnly: true,
-    ticketNumber: 1004,
+    ok: response.ok, readOnly: true, ticketNumber: 1004,
     ticketFormId: ticket.ticketFormId ?? null,
     attributeValues: ticket.attributeValues ?? null,
     attributeValueType: Array.isArray(ticket.attributeValues) ? 'array' : typeof ticket.attributeValues,
@@ -112,45 +90,53 @@ async function inspectAttributes(request, env) {
 async function inspectConversations(request, env) {
   if (!['GET', 'POST'].includes(request.method)) return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
-
   const paths = [
-    '/v2/ticketing/ticket/1004/comments',
-    '/v2/ticketing/ticket/1004/comment',
-    '/v2/ticketing/ticket/1004/conversations',
-    '/v2/ticketing/ticket/1004/conversation',
-    '/v2/ticketing/ticket/1004/messages',
-    '/v2/ticketing/ticket/1004/activity',
+    '/v2/ticketing/ticket/1004/comments', '/v2/ticketing/ticket/1004/comment',
+    '/v2/ticketing/ticket/1004/conversations', '/v2/ticketing/ticket/1004/conversation',
+    '/v2/ticketing/ticket/1004/messages', '/v2/ticketing/ticket/1004/activity',
   ];
-
   const results = [];
   for (const path of paths) {
     try {
       const response = await fetch(`${auth.baseUrl}${path}`, {
-        method: 'GET',
-        headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
+        method: 'GET', headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
       });
       const raw = await response.text();
-      results.push({
-        path,
-        status: response.status,
-        contentType: clean(response.headers.get('content-type') || '', 120),
-        bodyPreview: clean(raw, 3000),
-      });
-    } catch {
-      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
-    }
+      results.push({ path, status: response.status, contentType: clean(response.headers.get('content-type') || '', 120), bodyPreview: clean(raw, 3000) });
+    } catch { results.push({ path, status: 0, bodyPreview: 'Request failed.' }); }
   }
+  return json({ ok: true, readOnly: true, ticketNumber: 1004, results, build: '2026-07-14-ninja-ticket-conversation-discovery-v2' });
+}
 
-  return json({
-    ok: true,
-    readOnly: true,
-    ticketNumber: 1004,
-    results,
-    build: '2026-07-14-ninja-ticket-conversation-discovery-v2',
-  });
+async function validateCommentPayload(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
+  if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+  const auth = await getUserAccessToken(env);
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+  try {
+    const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004/comment`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: '{}',
+    });
+    const raw = await response.text();
+    return json({
+      ok: true,
+      validationOnly: true,
+      commentCreated: response.ok,
+      status: response.status,
+      bodyPreview: clean(raw, 3000),
+      build: '2026-07-14-ninja-comment-empty-payload-probe-v1',
+    });
+  } catch {
+    return json({ ok: false, error: 'Comment validation request failed.' }, 502);
+  }
 }
 
 export default {
@@ -158,6 +144,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/ninja-ticket-1004-attributes') return inspectAttributes(request, env);
     if (url.pathname === '/api/ninja-ticket-1004-conversations') return inspectConversations(request, env);
+    if (url.pathname === '/api/ninja-comment-payload-validation') return validateCommentPayload(request, env);
     return directWorker.fetch(request, env, ctx);
   },
 };
