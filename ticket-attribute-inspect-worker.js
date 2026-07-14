@@ -13,8 +13,22 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const clean = (value, max = 3000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function allowedOrigin(request) {
+  const allowedHosts = ['harringtonit.com', 'www.harringtonit.com'];
   const origin = request.headers.get('origin');
-  return !!origin && ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
+  if (origin) {
+    try {
+      return allowedHosts.includes(new URL(origin).hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  // Same-origin browser GET requests often omit the Origin header.
+  try {
+    return allowedHosts.includes(new URL(request.url).hostname);
+  } catch {
+    return false;
+  }
 }
 
 function getNinjaBaseUrl(regionValue) {
@@ -91,7 +105,7 @@ async function inspectAttributes(request, env) {
     ticketFormId: ticket.ticketFormId ?? null,
     attributeValues: ticket.attributeValues ?? null,
     attributeValueType: Array.isArray(ticket.attributeValues) ? 'array' : typeof ticket.attributeValues,
-    build: '2026-07-14-ninja-ticket-attribute-inspection-v3',
+    build: '2026-07-14-ninja-ticket-attribute-inspection-v4',
   }, response.ok ? 200 : 502);
 }
 
@@ -135,7 +149,7 @@ async function inspectConversations(request, env) {
     readOnly: true,
     ticketNumber: 1004,
     results,
-    build: '2026-07-14-ninja-ticket-conversation-discovery-v1',
+    build: '2026-07-14-ninja-ticket-conversation-discovery-v2',
   });
 }
 
