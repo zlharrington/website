@@ -1,4 +1,4 @@
-const BUILD_VERSION = '2026-07-14-ninja-auth-test-v1';
+const BUILD_VERSION = '2026-07-14-ninja-ticketing-probe-v1';
 const MAX_BODY_BYTES = 20_000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 600;
@@ -62,9 +62,7 @@ async function isRateLimited(request) {
   const cache = caches.default;
   const cached = await cache.match(key);
   const count = cached ? Number(await cached.text()) || 0 : 0;
-
   if (count >= RATE_LIMIT_MAX) return true;
-
   await cache.put(key, new Response(String(count + 1), {
     headers: { 'cache-control': `max-age=${RATE_LIMIT_WINDOW_SECONDS}` },
   }));
@@ -76,17 +74,14 @@ async function readJsonBody(request) {
   if (!contentType.toLowerCase().startsWith('application/json')) {
     return { error: json({ ok: false, error: 'Unsupported content type.' }, 415) };
   }
-
   const declaredLength = Number(request.headers.get('content-length') || 0);
   if (declaredLength > MAX_BODY_BYTES) {
     return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
   }
-
   const raw = await request.text();
   if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
     return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
   }
-
   try {
     return { payload: JSON.parse(raw) };
   } catch {
@@ -107,23 +102,12 @@ function getNinjaBaseUrl(regionValue) {
   return regionHosts[region] || null;
 }
 
-async function testNinjaAuth(request, env) {
-  if (request.method !== 'POST') {
-    return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
-  }
-
-  if (!isAllowedOrigin(request)) {
-    return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  }
-
+async function getNinjaToken(env) {
   if (!env.NINJA_CLIENT_ID || !env.NINJA_CLIENT_SECRET || !env.NINJA_REGION) {
-    return json({ ok: false, error: 'NinjaOne credentials are not fully configured.' }, 503);
+    return { error: 'NinjaOne credentials are not fully configured.', status: 503 };
   }
-
   const baseUrl = getNinjaBaseUrl(env.NINJA_REGION);
-  if (!baseUrl) {
-    return json({ ok: false, error: 'NinjaOne region is not recognized.' }, 400);
-  }
+  if (!baseUrl) return { error: 'NinjaOne region is not recognized.', status: 400 };
 
   const credentials = btoa(`${env.NINJA_CLIENT_ID}:${env.NINJA_CLIENT_SECRET}`);
   const body = new URLSearchParams({
@@ -143,7 +127,7 @@ async function testNinjaAuth(request, env) {
       body: body.toString(),
     });
   } catch {
-    return json({ ok: false, error: 'Could not reach NinjaOne.' }, 502);
+    return { error: 'Could not reach NinjaOne.', status: 502 };
   }
 
   let tokenResult = {};
@@ -154,57 +138,89 @@ async function testNinjaAuth(request, env) {
   }
 
   if (!tokenResponse.ok || !tokenResult.access_token) {
-    const providerError = singleLine(tokenResult.error_description || tokenResult.error || 'Authentication was rejected.', 240);
-    return json({
-      ok: false,
-      authenticated: false,
-      status: tokenResponse.status,
-      error: providerError,
-    }, 502);
+    return {
+      error: singleLine(tokenResult.error_description || tokenResult.error || 'Authentication was rejected.', 240),
+      status: 502,
+      providerStatus: tokenResponse.status,
+    };
   }
 
+  return { token: tokenResult.access_token, baseUrl, tokenResult };
+}
+
+async function testNinjaAuth(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
+  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+  const auth = await getNinjaToken(env);
+  if (auth.error) return json({ ok: false, authenticated: false, status: auth.providerStatus || auth.status, error: auth.error }, auth.status);
   return json({
     ok: true,
     authenticated: true,
     region: singleLine(env.NINJA_REGION, 20).toLowerCase(),
-    tokenType: singleLine(tokenResult.token_type || 'Bearer', 30),
-    expiresIn: Number(tokenResult.expires_in) || null,
-    scope: singleLine(tokenResult.scope || 'monitoring management', 200),
+    tokenType: singleLine(auth.tokenResult.token_type || 'Bearer', 30),
+    expiresIn: Number(auth.tokenResult.expires_in) || null,
+    scope: singleLine(auth.tokenResult.scope || 'monitoring management', 200),
   });
 }
 
+async function probeNinjaTicketing(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
+  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+
+  const auth = await getNinjaToken(env);
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+
+  const candidates = [
+    '/v2/ticketing/tickets?pageSize=1',
+    '/v2/ticketing/ticket',
+    '/v2/tickets?pageSize=1',
+    '/v2/organizations?pageSize=1',
+  ];
+
+  const results = [];
+  for (const path of candidates) {
+    try {
+      const response = await fetch(`${auth.baseUrl}${path}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${auth.token}`,
+          accept: 'application/json',
+        },
+      });
+      const raw = await response.text();
+      results.push({
+        path,
+        status: response.status,
+        contentType: singleLine(response.headers.get('content-type') || '', 120),
+        bodyPreview: singleLine(raw, 180),
+      });
+    } catch {
+      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
+    }
+  }
+
+  return json({ ok: true, readOnly: true, results });
+}
+
 async function sendEmail(request, env) {
-  if (request.method !== 'POST') {
-    return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
-  }
-
-  if (!isAllowedOrigin(request)) {
-    return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  }
-
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
+  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
   if (await isRateLimited(request)) {
     return json({ ok: false, error: 'Too many submissions. Please wait a few minutes and try again.' }, 429, {
       'retry-after': String(RATE_LIMIT_WINDOW_SECONDS),
     });
   }
-
-  if (!env.RESEND_API_KEY) {
-    return json({ ok: false, error: 'Email service is not configured.' }, 503);
-  }
+  if (!env.RESEND_API_KEY) return json({ ok: false, error: 'Email service is not configured.' }, 503);
 
   const { payload, error } = await readJsonBody(request);
   if (error) return error;
-
   if (clean(payload.website, 200)) return json({ ok: true });
 
   const type = singleLine(payload.type, 20);
   const name = singleLine(payload.name, 120);
   const email = singleLine(payload.email, 254).toLowerCase();
   const phone = singleLine(payload.phone, 60);
-
-  if (!name || !isEmail(email)) {
-    return json({ ok: false, error: 'Please provide a valid name and email address.' }, 400);
-  }
+  if (!name || !isEmail(email)) return json({ ok: false, error: 'Please provide a valid name and email address.' }, 400);
 
   let to;
   let subject;
@@ -215,7 +231,6 @@ async function sendEmail(request, env) {
     const business = singleLine(payload.business, 160);
     const message = clean(payload.message, 4000);
     if (!message) return json({ ok: false, error: 'Please enter a message.' }, 400);
-
     to = 'support@harringtonit.com';
     subject = `Website inquiry from ${business || name}`;
     html = `<h2>New website inquiry</h2>
@@ -233,11 +248,9 @@ async function sendEmail(request, env) {
     const summary = singleLine(payload.summary, 120);
     const description = clean(payload.description, 5000);
     const contactTime = singleLine(payload.contact_time, 160);
-
     if (!company || !priority || !category || !summary || !description) {
       return json({ ok: false, error: 'Please complete all required ticket fields.' }, 400);
     }
-
     const priorityLabel = singleLine(priority.split(' — ')[0] || 'Support', 30);
     to = 'support@harringtonit.rmmservices.net';
     subject = `${priorityLabel} - ${company} - ${summary}`;
@@ -276,7 +289,6 @@ async function sendEmail(request, env) {
     console.error('Resend request failed with status:', resendResponse.status);
     return json({ ok: false, error: 'Your message could not be sent. Please try again or call us.' }, 502);
   }
-
   return json({ ok: true });
 }
 
@@ -284,15 +296,15 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     let response;
-
     if (url.pathname === '/api/send-email') {
       response = await sendEmail(request, env);
     } else if (url.pathname === '/api/ninja-auth-test') {
       response = await testNinjaAuth(request, env);
+    } else if (url.pathname === '/api/ninja-ticketing-probe') {
+      response = await probeNinjaTicketing(request, env);
     } else {
       response = await env.ASSETS.fetch(request);
     }
-
     return withSecurityHeaders(response);
   },
 };
