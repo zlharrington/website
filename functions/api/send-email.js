@@ -1,4 +1,6 @@
-const json = (data, status = 200) => new Response(JSON.stringify(data), {
+const BUILD_VERSION = '2026-07-13-rmm-routing-v2';
+
+const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD_VERSION }), {
   status,
   headers: {
     'content-type': 'application/json; charset=utf-8',
@@ -20,7 +22,7 @@ export async function onRequestPost(context) {
   const { request, env } = context;
 
   if (!env.RESEND_API_KEY) {
-    return json({ ok: false, error: 'Email service is not configured. Add RESEND_API_KEY to the Cloudflare Pages Production environment and redeploy.' }, 503);
+    return json({ ok: false, error: 'Email service is not configured.' }, 503);
   }
 
   let payload;
@@ -30,7 +32,6 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: 'Invalid request.' }, 400);
   }
 
-  // Honeypot: bots commonly fill hidden fields.
   if (clean(payload.website, 200)) {
     return json({ ok: true });
   }
@@ -118,24 +119,18 @@ export async function onRequestPost(context) {
   });
 
   if (!response.ok) {
-    let providerMessage = '';
+    let resendMessage = '';
     try {
-      const providerError = await response.json();
-      providerMessage = clean(providerError.message || providerError.error?.message || providerError.name, 300);
-      console.error('Resend error:', response.status, providerError);
+      const resendError = await response.json();
+      resendMessage = clean(resendError?.message || resendError?.error?.message, 300);
     } catch {
-      providerMessage = clean(await response.text(), 300);
-      console.error('Resend error:', response.status, providerMessage);
+      resendMessage = clean(await response.text(), 300);
     }
-
-    const safeMessage = providerMessage
-      ? `Email provider error: ${providerMessage}`
-      : `Email provider rejected the request with status ${response.status}.`;
-
-    return json({ ok: false, error: safeMessage }, 502);
+    console.error('Resend error:', resendMessage);
+    return json({ ok: false, error: resendMessage ? `Email service error: ${resendMessage}` : 'Your message could not be sent. Please try again or call us.' }, 502);
   }
 
-  return json({ ok: true });
+  return json({ ok: true, route: type === 'ticket' ? 'rmm-backend' : 'general-contact' });
 }
 
 export function onRequest() {
