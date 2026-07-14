@@ -81,8 +81,9 @@ async function validateTicket(request, env) {
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
 
   const probePayload = {
-    subject: 'Website integration validation - do not create',
+    subject: 'Website integration validation - Default form probe',
     status: 'OPEN',
+    form: 'Default',
   };
 
   let response;
@@ -101,14 +102,19 @@ async function validateTicket(request, env) {
   }
 
   const raw = await response.text();
+  let parsed = {};
+  try { parsed = JSON.parse(raw); } catch { parsed = {}; }
+  const ticketId = parsed.id ?? parsed.ticketId ?? parsed.ticket?.id ?? null;
+
   return json({
     ok: true,
-    validationOnly: true,
+    validationOnly: !response.ok,
     ticketCreated: response.ok,
-    payloadVersion: 'subject-open-status-v1',
+    ticketId,
+    payloadVersion: 'subject-open-form-name-v1',
     status: response.status,
     bodyPreview: safeLine(raw),
-    build: '2026-07-14-ninja-ticket-open-status-probe-v1',
+    build: '2026-07-14-ninja-ticket-default-form-name-probe-v1',
   });
 }
 
