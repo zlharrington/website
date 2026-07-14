@@ -16,7 +16,7 @@
   const clean = value => (value || '').trim();
 
   const sendForm = async (payload) => {
-    const response = await fetch('/api/send-email', {
+    const response = await fetch('/api/submit-support-ticket', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
@@ -55,7 +55,6 @@
   const buildTicket = () => {
     const data = new FormData(ticketForm);
     const ticket = {
-      type: 'ticket',
       name: clean(data.get('name')),
       company: clean(data.get('company')),
       email: clean(data.get('email')),
