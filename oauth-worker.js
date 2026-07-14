@@ -225,6 +225,11 @@ async function validateTicketWithUserToken(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return jsonResponse({ ok: false, error: auth.error }, auth.status);
 
+  const probePayload = {
+    subject: 'Harrington IT validation probe',
+    status: '__VALIDATION_ONLY__',
+  };
+
   let response;
   try {
     response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
@@ -234,7 +239,7 @@ async function validateTicketWithUserToken(request, env) {
         accept: 'application/json',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ subject: 'Harrington IT validation probe' }),
+      body: JSON.stringify(probePayload),
     });
   } catch {
     return jsonResponse({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
@@ -245,9 +250,9 @@ async function validateTicketWithUserToken(request, env) {
     ok: true,
     validationOnly: true,
     ticketCreated: response.ok,
-    payloadVersion: 'subject-v1',
+    payloadVersion: 'subject-invalid-status-v1',
     status: response.status,
-    bodyPreview: safeLine(raw, 2000),
+    bodyPreview: safeLine(raw, 3000),
   });
 }
 
