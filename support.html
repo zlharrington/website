@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/styles.css">
   <link rel="stylesheet" href="assets/polish.css">
-  <script defer src="assets/support-form-v2.js"></script>
+  <script defer src="assets/support-form-v2.js?v=20260714-api-ready"></script>
 </head>
 <body>
   <header class="site-header">
@@ -40,20 +40,20 @@
         <form class="ticket-form" data-ticket-form>
           <div class="form-heading">
             <h2>Tell us what is happening</h2>
-            <p>Provide as much detail as possible so we can assist you efficiently.</p>
+            <p>Provide the details you know. You do not need to use technical language.</p>
           </div>
           <div class="form-grid">
-            <label>Your name<input type="text" name="name" maxlength="120" required></label>
-            <label>Business name<input type="text" name="company" maxlength="160" required></label>
-            <label>Email address<input type="email" name="email" maxlength="254" required></label>
-            <label>Phone number<input type="tel" name="phone" maxlength="60"></label>
+            <label>Your name<input type="text" name="name" maxlength="120" autocomplete="name" required></label>
+            <label>Business name<input type="text" name="company" maxlength="160" autocomplete="organization" required></label>
+            <label>Email address<input type="email" name="email" maxlength="254" autocomplete="email" required></label>
+            <label>Phone number<input type="tel" name="phone" maxlength="60" autocomplete="tel"></label>
             <label>Priority
               <select name="priority" required>
                 <option value="">Select priority</option>
-                <option>Low — General request</option>
-                <option>Normal — Work is affected</option>
-                <option>High — Multiple users affected</option>
-                <option>Critical — Business operations stopped</option>
+                <option>Low — Question or minor inconvenience</option>
+                <option>Normal — Work is affected, but a workaround exists</option>
+                <option>High — One or more people cannot work</option>
+                <option>Critical — Major outage, security incident, or entire business affected</option>
               </select>
             </label>
             <label>Issue category
@@ -69,9 +69,18 @@
                 <option>Other</option>
               </select>
             </label>
-            <label class="full-field">Short summary<input type="text" name="summary" maxlength="120" required></label>
-            <label class="full-field">Detailed description<textarea name="description" rows="7" maxlength="5000" required></textarea></label>
-            <label class="full-field">Best time to contact you<input type="text" name="contact_time" maxlength="160"></label>
+            <label class="full-field">Affected device <span aria-hidden="true">(optional)</span>
+              <input type="text" name="affected_device" maxlength="160" placeholder="Computer name, printer, server, device, or Not sure">
+            </label>
+            <label class="full-field">Short summary
+              <input type="text" name="summary" maxlength="120" placeholder="Example: Outlook will not open" required>
+            </label>
+            <label class="full-field">What is happening?
+              <textarea name="description" rows="7" maxlength="5000" placeholder="Include any error messages, when the issue started, who is affected, and what you have already tried." required></textarea>
+            </label>
+            <label class="full-field">Best time to contact you <span aria-hidden="true">(optional)</span>
+              <input type="text" name="contact_time" maxlength="160" placeholder="Example: Anytime after 2 PM">
+            </label>
             <div class="sr-only" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
           </div>
           <div class="ticket-actions">
@@ -79,7 +88,7 @@
             <button class="button button-ghost" type="button" data-copy-ticket>Copy ticket details</button>
           </div>
           <div class="ticket-status" data-ticket-status aria-live="polite"></div>
-          <p class="form-note">Do not include passwords or sensitive personal information.</p>
+          <p class="form-note">Do not include passwords, payment information, Social Security numbers, or other sensitive personal information.</p>
         </form>
 
         <aside class="support-aside">
@@ -95,7 +104,7 @@
               <li>The exact error message</li>
               <li>Who or what is affected</li>
               <li>When the issue started</li>
-              <li>Any recent changes</li>
+              <li>Anything you already tried</li>
             </ul>
           </div>
           <div class="aside-card">
