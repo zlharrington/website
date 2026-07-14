@@ -9,7 +9,7 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v6-web-ticket-fallback';
+const BUILD = '2026-07-14-ninja-direct-ticket-v7-multipart-comment';
 const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const TICKET_FORM_ID = 1;
 const WEB_TICKET_CLIENT_ID = 2;
@@ -124,14 +124,24 @@ async function findOrganization(auth, company) {
 
 async function addTicketComment(auth, ticketId, details) {
   try {
+    const form = new FormData();
+    const commentPayload = {
+      body: details,
+      public: false,
+    };
+    form.append(
+      'comment',
+      new Blob([JSON.stringify(commentPayload)], { type: 'application/json' }),
+      'comment.json',
+    );
+
     const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/${encodeURIComponent(ticketId)}/comment`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${auth.accessToken}`,
         accept: 'application/json',
-        'content-type': 'application/json',
       },
-      body: JSON.stringify({ body: details, public: false }),
+      body: form,
     });
     const raw = await response.text();
     let result = {};
