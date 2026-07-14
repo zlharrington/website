@@ -9,9 +9,10 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v2';
+const BUILD = '2026-07-14-ninja-direct-ticket-v3';
 const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const TICKET_FORM_ID = 1;
+const INTERNAL_CLIENT_ID = 1;
 
 const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD }), { status, headers: HEADERS });
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
@@ -110,6 +111,7 @@ async function createWebsiteTicket(request, env) {
 
   const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
   const ninjaPayload = {
+    clientId: INTERNAL_CLIENT_ID,
     subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
     status: 'OPEN',
     type: 'PROBLEM',
@@ -154,6 +156,7 @@ async function createWebsiteTicket(request, env) {
     ticketNumber,
     direct: true,
     detailsPending: true,
+    clientId: INTERNAL_CLIENT_ID,
   });
 }
 
