@@ -22,6 +22,8 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
+const safeLine = (value, max = 1200) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
+
 function getNinjaBaseUrl(regionValue) {
   const region = String(regionValue ?? '').trim().toLowerCase();
   const regionHosts = {
@@ -72,6 +74,13 @@ function htmlResponse(title, body, status = 200) {
 <style>body{font-family:system-ui,-apple-system,sans-serif;max-width:760px;margin:60px auto;padding:0 24px;line-height:1.5;color:#172033}code,pre{background:#f3f5f8;border-radius:8px;padding:4px 7px}pre{padding:16px;overflow-wrap:anywhere;white-space:pre-wrap}.ok{color:#176b3a}.error{color:#a12b2b}</style></head><body>${body}</body></html>`, {
     status,
     headers: { 'content-type': 'text/html; charset=utf-8', ...SECURITY_HEADERS },
+  });
+}
+
+function jsonResponse(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8', ...SECURITY_HEADERS },
   });
 }
 
@@ -164,6 +173,83 @@ async function handleCallback(request, env) {
 <p><strong>Keep this page private.</strong> After saving the secret, close this tab. The token is not stored by this page.</p>`);
 }
 
+async function getUserAccessToken(env) {
+  if (!env.NINJA_CLIENT_ID || !env.NINJA_CLIENT_SECRET || !env.NINJA_REFRESH_TOKEN || !env.NINJA_REGION) {
+    return { error: 'NinjaOne user credentials are incomplete.', status: 503 };
+  }
+  const baseUrl = getNinjaBaseUrl(env.NINJA_REGION);
+  if (!baseUrl) return { error: 'NinjaOne region is invalid.', status: 400 };
+
+  const credentials = btoa(`${env.NINJA_CLIENT_ID}:${env.NINJA_CLIENT_SECRET}`);
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: env.NINJA_REFRESH_TOKEN,
+  });
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}/ws/oauth/token`, {
+      method: 'POST',
+      headers: {
+        authorization: `Basic ${credentials}`,
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: body.toString(),
+    });
+  } catch {
+    return { error: 'Could not reach NinjaOne.', status: 502 };
+  }
+
+  const raw = await response.text();
+  const result = parseTokenResponse(raw, response.headers.get('content-type') || '');
+  if (!response.ok || !result.access_token) {
+    return {
+      error: safeLine(result.error_description || result.error || `Refresh failed with status ${response.status}.`, 300),
+      status: 502,
+    };
+  }
+
+  return { accessToken: result.access_token, baseUrl };
+}
+
+async function validateTicketWithUserToken(request, env) {
+  if (request.method !== 'POST') {
+    return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405);
+  }
+  const origin = request.headers.get('origin');
+  if (!origin || !['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin)) {
+    return jsonResponse({ ok: false, error: 'Request origin is not allowed.' }, 403);
+  }
+
+  const auth = await getUserAccessToken(env);
+  if (auth.error) return jsonResponse({ ok: false, error: auth.error }, auth.status);
+
+  let response;
+  try {
+    response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    return jsonResponse({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
+  }
+
+  const raw = await response.text();
+  return jsonResponse({
+    ok: true,
+    validationOnly: true,
+    ticketCreated: response.ok,
+    status: response.status,
+    bodyPreview: safeLine(raw, 2000),
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -174,6 +260,9 @@ export default {
     if (url.pathname === '/api/ninja-oauth-callback') {
       if (request.method !== 'GET') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET', ...SECURITY_HEADERS } });
       return handleCallback(request, env);
+    }
+    if (url.pathname === '/api/ninja-user-ticket-validation') {
+      return validateTicketWithUserToken(request, env);
     }
     return baseWorker.fetch(request, env, ctx);
   },
