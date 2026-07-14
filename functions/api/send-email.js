@@ -80,7 +80,7 @@ export async function onRequestPost(context) {
 
     const reference = `HIT-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`;
     const priorityLabel = priority.split(' — ')[0] || 'Support';
-    to = 'support@harringtonit.rmmservices.net';
+    to = 'tickets@harringtonit.com';
     subject = `[${reference}] ${priorityLabel} - ${company} - ${summary}`;
     html = `
       <h2>Harrington IT support request</h2>
