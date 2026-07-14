@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "website",
-  "main": "direct-ticket-worker.js",
+  "main": "ticket-attribute-inspect-worker.js",
   "compatibility_date": "2026-07-13",
   "assets": {
     "directory": ".",
