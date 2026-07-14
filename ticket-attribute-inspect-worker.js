@@ -10,10 +10,11 @@ const HEADERS = {
 };
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
+const clean = (value, max = 3000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
-  return !origin || ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
+  return !!origin && ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
 }
 
 function getNinjaBaseUrl(regionValue) {
@@ -90,14 +91,59 @@ async function inspectAttributes(request, env) {
     ticketFormId: ticket.ticketFormId ?? null,
     attributeValues: ticket.attributeValues ?? null,
     attributeValueType: Array.isArray(ticket.attributeValues) ? 'array' : typeof ticket.attributeValues,
-    build: '2026-07-14-ninja-ticket-attribute-inspection-v2',
+    build: '2026-07-14-ninja-ticket-attribute-inspection-v3',
   }, response.ok ? 200 : 502);
+}
+
+async function inspectConversations(request, env) {
+  if (!['GET', 'POST'].includes(request.method)) return json({ ok: false, error: 'Method not allowed.' }, 405);
+  if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+
+  const auth = await getUserAccessToken(env);
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+
+  const paths = [
+    '/v2/ticketing/ticket/1004/comments',
+    '/v2/ticketing/ticket/1004/comment',
+    '/v2/ticketing/ticket/1004/conversations',
+    '/v2/ticketing/ticket/1004/conversation',
+    '/v2/ticketing/ticket/1004/messages',
+    '/v2/ticketing/ticket/1004/activity',
+  ];
+
+  const results = [];
+  for (const path of paths) {
+    try {
+      const response = await fetch(`${auth.baseUrl}${path}`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
+      });
+      const raw = await response.text();
+      results.push({
+        path,
+        status: response.status,
+        contentType: clean(response.headers.get('content-type') || '', 120),
+        bodyPreview: clean(raw, 3000),
+      });
+    } catch {
+      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
+    }
+  }
+
+  return json({
+    ok: true,
+    readOnly: true,
+    ticketNumber: 1004,
+    results,
+    build: '2026-07-14-ninja-ticket-conversation-discovery-v1',
+  });
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/api/ninja-ticket-1004-attributes') return inspectAttributes(request, env);
+    if (url.pathname === '/api/ninja-ticket-1004-conversations') return inspectConversations(request, env);
     return directWorker.fetch(request, env, ctx);
   },
 };
