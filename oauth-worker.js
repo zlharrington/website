@@ -234,7 +234,7 @@ async function validateTicketWithUserToken(request, env) {
         accept: 'application/json',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ subject: 'Harrington IT validation probe' }),
     });
   } catch {
     return jsonResponse({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
@@ -245,6 +245,7 @@ async function validateTicketWithUserToken(request, env) {
     ok: true,
     validationOnly: true,
     ticketCreated: response.ok,
+    payloadVersion: 'subject-v1',
     status: response.status,
     bodyPreview: safeLine(raw, 2000),
   });
