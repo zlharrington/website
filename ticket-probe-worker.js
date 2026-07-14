@@ -14,7 +14,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
   headers: SECURITY_HEADERS,
 });
 
-const safeLine = (value, max = 2000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
+const safeLine = (value, max = 3000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function getNinjaBaseUrl(regionValue) {
   const region = String(regionValue ?? '').trim().toLowerCase();
@@ -78,6 +78,11 @@ async function validateTicket(request, env) {
   }
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
 
+  const probePayload = {
+    subject: 'Website integration validation - do not create',
+    status: 'OPEN',
+  };
+
   let response;
   try {
     response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
@@ -87,7 +92,7 @@ async function validateTicket(request, env) {
         accept: 'application/json',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ subject: 'Website integration validation - do not create' }),
+      body: JSON.stringify(probePayload),
     });
   } catch {
     return json({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
@@ -98,9 +103,10 @@ async function validateTicket(request, env) {
     ok: true,
     validationOnly: true,
     ticketCreated: response.ok,
+    payloadVersion: 'subject-open-status-v1',
     status: response.status,
     bodyPreview: safeLine(raw),
-    build: '2026-07-14-ninja-ticket-subject-probe-v1',
+    build: '2026-07-14-ninja-ticket-open-status-probe-v1',
   });
 }
 
