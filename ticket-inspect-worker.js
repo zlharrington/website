@@ -9,7 +9,14 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
+const BUILD = '2026-07-14-ninja-direct-ticket-v1';
+const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
+const TICKET_FORM_ID = 1;
+
+const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD }), { status, headers: HEADERS });
+const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
+const singleLine = (value, max = 200) => clean(value, max).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
+const isEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
@@ -63,68 +70,117 @@ async function getUserAccessToken(env) {
   const raw = await response.text();
   const result = parseTokenResponse(raw, response.headers.get('content-type') || '');
   if (!response.ok || !result.access_token) {
-    return { error: result.error_description || result.error || `Refresh failed with status ${response.status}.`, status: 502 };
+    return { error: singleLine(result.error_description || result.error || `Refresh failed with status ${response.status}.`, 300), status: 502 };
   }
   return { accessToken: result.access_token, baseUrl };
 }
 
-function collectRelevantFields(value, path = '', output = {}) {
-  if (value === null || value === undefined) return output;
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => collectRelevantFields(item, `${path}[${index}]`, output));
-    return output;
-  }
-  if (typeof value !== 'object') return output;
-
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = path ? `${path}.${key}` : key;
-    const lower = key.toLowerCase();
-    if (['form', 'template', 'board', 'source', 'type', 'status', 'priority', 'severity', 'client', 'organization', 'requester'].some(term => lower.includes(term))) {
-      output[childPath] = child;
-    }
-    if (child && typeof child === 'object') collectRelevantFields(child, childPath, output);
-  }
-  return output;
+async function readJson(request) {
+  if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) return null;
+  try { return await request.json(); } catch { return null; }
 }
 
-async function inspectTicket1004(request, env) {
+function buildTicketDetails(data) {
+  return [
+    'HARRINGTON IT SUPPORT REQUEST',
+    '',
+    `Name: ${data.name}`,
+    `Business: ${data.company}`,
+    `Email: ${data.email}`,
+    `Phone: ${data.phone || 'Not provided'}`,
+    `Requested priority: ${data.priority}`,
+    `Category: ${data.category}`,
+    `Affected device: ${data.affectedDevice || 'Not provided'}`,
+    `Best contact time: ${data.contactTime || 'Not provided'}`,
+    '',
+    'DETAILS',
+    data.description,
+  ].join('\n');
+}
+
+async function createWebsiteTicket(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
 
+  const payload = await readJson(request);
+  if (!payload) return json({ ok: false, error: 'Invalid request.' }, 400);
+  if (singleLine(payload.website, 200)) return json({ ok: true });
+
+  const data = {
+    name: singleLine(payload.name, 120),
+    company: singleLine(payload.company, 160),
+    email: singleLine(payload.email, 254).toLowerCase(),
+    phone: singleLine(payload.phone, 60),
+    priority: singleLine(payload.priority, 100),
+    category: singleLine(payload.category, 100),
+    affectedDevice: singleLine(payload.affected_device, 160),
+    summary: singleLine(payload.summary, 120),
+    description: clean(payload.description, 5000),
+    contactTime: singleLine(payload.contact_time, 160),
+  };
+
+  if (!data.name || !data.company || !isEmail(data.email) || !data.priority || !data.category || !data.summary || !data.description) {
+    return json({ ok: false, error: 'Please complete all required ticket fields.' }, 400);
+  }
+
   const auth = await getUserAccessToken(env);
-  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+  if (auth.error) return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, auth.status);
+
+  const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
+  const ninjaPayload = {
+    subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
+    status: 'OPEN',
+    type: 'PROBLEM',
+    priority: 'MEDIUM',
+    severity: 'MODERATE',
+    ticketFormId: TICKET_FORM_ID,
+    requesterUid: WEBSITE_REQUESTER_UID,
+    description: buildTicketDetails(data),
+  };
 
   let response;
   try {
-    response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004`, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
+    response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(ninjaPayload),
     });
   } catch {
-    return json({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
+    return json({ ok: false, error: 'Could not reach NinjaOne. Please try again or call Harrington IT.' }, 502);
   }
 
   const raw = await response.text();
-  let ticket = {};
-  try { ticket = JSON.parse(raw); } catch {
-    return json({ ok: false, status: response.status, error: 'NinjaOne did not return valid JSON.' }, 502);
+  let result = {};
+  try { result = JSON.parse(raw); } catch { result = {}; }
+
+  if (!response.ok) {
+    console.error('NinjaOne ticket creation failed', response.status, raw.slice(0, 2000));
+    return json({
+      ok: false,
+      error: 'Your ticket could not be created. Please try again or call Harrington IT.',
+      providerStatus: response.status,
+      providerReason: singleLine(result.reason || result.resultCode || result.errorMessage || '', 500),
+    }, 502);
   }
 
-  return json({
-    ok: response.ok,
-    readOnly: true,
-    status: response.status,
-    ticketNumber: 1004,
-    topLevelKeys: Object.keys(ticket),
-    relevantFields: collectRelevantFields(ticket),
-    build: '2026-07-14-ninja-ticket-1004-structured-fields-v1',
-  }, response.ok ? 200 : 502);
+  const ticketNumber = result.id ?? result.ticketId ?? result.ticket?.id ?? null;
+  return json({ ok: true, ticketNumber, direct: true });
 }
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname === '/api/ninja-ticket-1004-fields') return inspectTicket1004(request, env);
+
+    if (url.pathname === '/api/send-email' && request.method === 'POST') {
+      const clone = request.clone();
+      const payload = await readJson(clone);
+      if (payload?.type === 'ticket') return createWebsiteTicket(request, env);
+    }
+
     return baseWorker.fetch(request, env, ctx);
   },
 };
