@@ -116,13 +116,13 @@ async function validateCommentPayload(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
 
-  const fieldNames = ['body', 'comment', 'text', 'content', 'message', 'htmlBody'];
+  const partNames = ['comment', 'request', 'ticketComment', 'data', 'metadata', 'commentRequest'];
   const results = [];
 
-  for (const fieldName of fieldNames) {
+  for (const partName of partNames) {
     try {
       const form = new FormData();
-      form.append(fieldName, '');
+      form.append(partName, new Blob(['{}'], { type: 'application/json' }), `${partName}.json`);
       const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004/comment`, {
         method: 'POST',
         headers: {
@@ -133,14 +133,14 @@ async function validateCommentPayload(request, env) {
       });
       const raw = await response.text();
       results.push({
-        fieldName,
+        partName,
         status: response.status,
         responseContentType: clean(response.headers.get('content-type') || '', 120),
         bodyPreview: clean(raw, 3000),
         commentCreated: response.ok,
       });
     } catch {
-      results.push({ fieldName, status: 0, bodyPreview: 'Request failed.', commentCreated: false });
+      results.push({ partName, status: 0, bodyPreview: 'Request failed.', commentCreated: false });
     }
   }
 
@@ -148,7 +148,7 @@ async function validateCommentPayload(request, env) {
     ok: true,
     validationOnly: true,
     results,
-    build: '2026-07-14-ninja-comment-multipart-field-probe-v1',
+    build: '2026-07-14-ninja-comment-multipart-json-part-probe-v1',
   });
 }
 
