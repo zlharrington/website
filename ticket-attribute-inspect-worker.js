@@ -115,28 +115,46 @@ async function validateCommentPayload(request, env) {
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
-  try {
-    const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004/comment`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${auth.accessToken}`,
-        accept: 'application/json',
-        'content-type': 'application/json',
-      },
-      body: '{}',
-    });
-    const raw = await response.text();
-    return json({
-      ok: true,
-      validationOnly: true,
-      commentCreated: response.ok,
-      status: response.status,
-      bodyPreview: clean(raw, 3000),
-      build: '2026-07-14-ninja-comment-empty-payload-probe-v1',
-    });
-  } catch {
-    return json({ ok: false, error: 'Comment validation request failed.' }, 502);
+
+  const probes = [
+    { label: 'json', contentType: 'application/json', body: '{}' },
+    { label: 'form-urlencoded', contentType: 'application/x-www-form-urlencoded', body: '' },
+    { label: 'text-plain', contentType: 'text/plain', body: '' },
+    { label: 'multipart-empty', contentType: 'multipart/form-data; boundary=----harringtonprobe', body: '------harringtonprobe--\r\n' },
+  ];
+
+  const results = [];
+  for (const probe of probes) {
+    try {
+      const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/1004/comment`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${auth.accessToken}`,
+          accept: 'application/json',
+          'content-type': probe.contentType,
+        },
+        body: probe.body,
+      });
+      const raw = await response.text();
+      results.push({
+        label: probe.label,
+        contentTypeSent: probe.contentType,
+        status: response.status,
+        responseContentType: clean(response.headers.get('content-type') || '', 120),
+        bodyPreview: clean(raw, 3000),
+        commentCreated: response.ok,
+      });
+    } catch {
+      results.push({ label: probe.label, status: 0, bodyPreview: 'Request failed.', commentCreated: false });
+    }
   }
+
+  return json({
+    ok: true,
+    validationOnly: true,
+    results,
+    build: '2026-07-14-ninja-comment-content-type-probe-v1',
+  });
 }
 
 export default {
