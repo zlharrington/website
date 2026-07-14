@@ -14,7 +14,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
   headers: SECURITY_HEADERS,
 });
 
-const safeLine = (value, max = 3000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
+const safeLine = (value, max = 6000) => String(value ?? '').replace(/[\r\n\t]+/g, ' ').slice(0, max);
 
 function getNinjaBaseUrl(regionValue) {
   const region = String(regionValue ?? '').trim().toLowerCase();
@@ -169,11 +169,62 @@ async function discoverTicketForms(request, env) {
   });
 }
 
+async function discoverTicket1004(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
+  if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+
+  let auth;
+  try {
+    auth = await getUserAccessToken(env);
+  } catch {
+    return json({ ok: false, error: 'Could not reach NinjaOne authentication.' }, 502);
+  }
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+
+  const paths = [
+    '/v2/ticketing/ticket/1004',
+    '/v2/ticketing/tickets/1004',
+    '/v2/ticketing/ticket?id=1004',
+    '/v2/ticketing/tickets?id=1004',
+  ];
+
+  const results = [];
+  for (const path of paths) {
+    try {
+      const response = await fetch(`${auth.baseUrl}${path}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${auth.accessToken}`,
+          accept: 'application/json',
+        },
+      });
+      const raw = await response.text();
+      results.push({
+        path,
+        status: response.status,
+        contentType: safeLine(response.headers.get('content-type') || '', 120),
+        bodyPreview: safeLine(raw, 6000),
+      });
+    } catch {
+      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
+    }
+  }
+
+  return json({
+    ok: true,
+    readOnly: true,
+    ticketNumber: 1004,
+    results,
+    build: '2026-07-14-ninja-ticket-1004-detail-discovery-v1',
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/api/ninja-user-ticket-validation') return validateTicket(request, env);
     if (url.pathname === '/api/ninja-ticket-form-discovery') return discoverTicketForms(request, env);
+    if (url.pathname === '/api/ninja-ticket-1004-discovery') return discoverTicket1004(request, env);
     return oauthWorker.fetch(request, env, ctx);
   },
 };
