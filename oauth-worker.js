@@ -1,7 +1,7 @@
 import baseWorker from './worker.js';
 
 const REDIRECT_URI = 'https://harringtonit.com/api/ninja-oauth-callback';
-const OAUTH_SCOPE = 'monitoring management';
+const OAUTH_SCOPE = 'monitoring management offline_access';
 const STATE_MAX_AGE_SECONDS = 600;
 
 const SECURITY_HEADERS = {
@@ -91,7 +91,20 @@ async function startOAuth(env) {
   authorizeUrl.searchParams.set('redirect_uri', REDIRECT_URI);
   authorizeUrl.searchParams.set('scope', OAUTH_SCOPE);
   authorizeUrl.searchParams.set('state', state);
+  authorizeUrl.searchParams.set('prompt', 'consent');
   return Response.redirect(authorizeUrl.toString(), 302);
+}
+
+function parseTokenResponse(raw, contentType) {
+  if (contentType.includes('application/json')) {
+    try { return JSON.parse(raw); } catch { return {}; }
+  }
+  try {
+    const params = new URLSearchParams(raw);
+    return Object.fromEntries(params.entries());
+  } catch {
+    return {};
+  }
 }
 
 async function handleCallback(request, env) {
@@ -132,10 +145,14 @@ async function handleCallback(request, env) {
     return htmlResponse('NinjaOne OAuth error', '<h1 class="error">Could not reach NinjaOne.</h1>', 502);
   }
 
-  let result = {};
-  try { result = await tokenResponse.json(); } catch { result = {}; }
+  const raw = await tokenResponse.text();
+  const contentType = tokenResponse.headers.get('content-type') || '';
+  const result = parseTokenResponse(raw, contentType);
+
   if (!tokenResponse.ok || !result.refresh_token) {
-    const detail = result.error_description || result.error || `Token exchange failed with status ${tokenResponse.status}.`;
+    const detail = result.error_description || result.error || (result.access_token
+      ? 'NinjaOne returned an access token but no refresh token. Confirm Refresh Token is enabled for the OAuth app, then authorize again.'
+      : `Token exchange failed with status ${tokenResponse.status}.`);
     return htmlResponse('NinjaOne OAuth error', `<h1 class="error">Token exchange failed.</h1><p>${escapeHtml(detail)}</p>`, 502);
   }
 
