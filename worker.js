@@ -1,4 +1,6 @@
-const json = (data, status = 200) => new Response(JSON.stringify(data), {
+const BUILD_VERSION = '2026-07-13-worker-rmm-routing-v1';
+
+const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD_VERSION }), {
   status,
   headers: {
     'content-type': 'application/json; charset=utf-8',
@@ -76,7 +78,7 @@ async function sendEmail(request, env) {
 
     const reference = `HIT-${new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}`;
     const priorityLabel = priority.split(' — ')[0] || 'Support';
-    to = 'tickets@harringtonit.com';
+    to = 'support@harringtonit.rmmservices.net';
     subject = `[${reference}] ${priorityLabel} - ${company} - ${summary}`;
     html = `<h2>Harrington IT support request</h2>
       <p><strong>Reference:</strong> ${reference}</p>
@@ -116,7 +118,7 @@ async function sendEmail(request, env) {
     return json({ ok: false, error: 'Your message could not be sent. Please try again or call us.' }, 502);
   }
 
-  return json({ ok: true });
+  return json({ ok: true, recipient: to });
 }
 
 export default {
