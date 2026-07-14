@@ -32,6 +32,8 @@
     if (!response.ok || !result.ok) {
       throw new Error(result.error || 'Your message could not be sent. Please try again.');
     }
+
+    return result;
   };
 
   const setBusy = (button, busy, busyText) => {
@@ -60,13 +62,15 @@
       phone: clean(data.get('phone')),
       priority: clean(data.get('priority')),
       category: clean(data.get('category')),
+      affected_device: clean(data.get('affected_device')),
       summary: clean(data.get('summary')),
       description: clean(data.get('description')),
       contact_time: clean(data.get('contact_time')),
       website: clean(data.get('website')),
     };
 
-    const subject = `[${ticket.priority.split(' — ')[0] || 'Support'}] ${ticket.company} - ${ticket.summary}`;
+    const priorityLabel = ticket.priority.split(' — ')[0] || 'Support';
+    const subject = `${priorityLabel} - ${ticket.company} - ${ticket.summary}`;
     const body = [
       'HARRINGTON IT SUPPORT REQUEST',
       '-----------------------------',
@@ -76,6 +80,7 @@
       `Phone: ${ticket.phone || 'Not provided'}`,
       `Priority: ${ticket.priority}`,
       `Category: ${ticket.category}`,
+      `Affected device: ${ticket.affected_device || 'Not provided'}`,
       `Best contact time: ${ticket.contact_time || 'Not provided'}`,
       '',
       'SUMMARY',
@@ -103,9 +108,13 @@
       if (ticketStatus) ticketStatus.textContent = 'Submitting your support request…';
 
       try {
-        await sendForm(ticket);
+        const result = await sendForm(ticket);
         ticketForm.reset();
-        if (ticketStatus) ticketStatus.textContent = 'Your support request has been submitted.';
+        if (ticketStatus) {
+          ticketStatus.textContent = result.ticketNumber
+            ? `Your support request has been submitted. Ticket #${result.ticketNumber}.`
+            : 'Your support request has been submitted.';
+        }
       } catch (error) {
         if (ticketStatus) ticketStatus.textContent = error.message;
       } finally {
