@@ -1,4 +1,4 @@
-const BUILD_VERSION = '2026-07-14-ninja-ticketing-probe-v1';
+const BUILD_VERSION = '2026-07-14-ninja-ticket-validation-v1';
 const MAX_BODY_BYTES = 20_000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 600;
@@ -166,7 +166,6 @@ async function testNinjaAuth(request, env) {
 async function probeNinjaTicketing(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
   if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-
   const auth = await getNinjaToken(env);
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
 
@@ -176,16 +175,12 @@ async function probeNinjaTicketing(request, env) {
     '/v2/tickets?pageSize=1',
     '/v2/organizations?pageSize=1',
   ];
-
   const results = [];
   for (const path of candidates) {
     try {
       const response = await fetch(`${auth.baseUrl}${path}`, {
         method: 'GET',
-        headers: {
-          authorization: `Bearer ${auth.token}`,
-          accept: 'application/json',
-        },
+        headers: { authorization: `Bearer ${auth.token}`, accept: 'application/json' },
       });
       const raw = await response.text();
       results.push({
@@ -198,8 +193,41 @@ async function probeNinjaTicketing(request, env) {
       results.push({ path, status: 0, bodyPreview: 'Request failed.' });
     }
   }
-
   return json({ ok: true, readOnly: true, results });
+}
+
+async function probeNinjaTicketValidation(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
+  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+  const auth = await getNinjaToken(env);
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+
+  let response;
+  try {
+    response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.token}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+  } catch {
+    return json({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
+  }
+
+  const raw = await response.text();
+  return json({
+    ok: true,
+    validationOnly: true,
+    ticketCreated: response.ok,
+    path: '/v2/ticketing/ticket',
+    status: response.status,
+    allow: singleLine(response.headers.get('allow') || '', 100),
+    contentType: singleLine(response.headers.get('content-type') || '', 120),
+    bodyPreview: singleLine(raw, 1200),
+  });
 }
 
 async function sendEmail(request, env) {
@@ -302,6 +330,8 @@ export default {
       response = await testNinjaAuth(request, env);
     } else if (url.pathname === '/api/ninja-ticketing-probe') {
       response = await probeNinjaTicketing(request, env);
+    } else if (url.pathname === '/api/ninja-ticket-validation') {
+      response = await probeNinjaTicketValidation(request, env);
     } else {
       response = await env.ASSETS.fetch(request);
     }
