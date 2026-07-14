@@ -9,7 +9,7 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v1';
+const BUILD = '2026-07-14-ninja-direct-ticket-v2';
 const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const TICKET_FORM_ID = 1;
 
@@ -80,24 +80,6 @@ async function readJson(request) {
   try { return await request.json(); } catch { return null; }
 }
 
-function buildTicketDetails(data) {
-  return [
-    'HARRINGTON IT SUPPORT REQUEST',
-    '',
-    `Name: ${data.name}`,
-    `Business: ${data.company}`,
-    `Email: ${data.email}`,
-    `Phone: ${data.phone || 'Not provided'}`,
-    `Requested priority: ${data.priority}`,
-    `Category: ${data.category}`,
-    `Affected device: ${data.affectedDevice || 'Not provided'}`,
-    `Best contact time: ${data.contactTime || 'Not provided'}`,
-    '',
-    'DETAILS',
-    data.description,
-  ].join('\n');
-}
-
 async function createWebsiteTicket(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
@@ -135,7 +117,6 @@ async function createWebsiteTicket(request, env) {
     severity: 'MODERATE',
     ticketFormId: TICKET_FORM_ID,
     requesterUid: WEBSITE_REQUESTER_UID,
-    description: buildTicketDetails(data),
   };
 
   let response;
@@ -168,7 +149,12 @@ async function createWebsiteTicket(request, env) {
   }
 
   const ticketNumber = result.id ?? result.ticketId ?? result.ticket?.id ?? null;
-  return json({ ok: true, ticketNumber, direct: true });
+  return json({
+    ok: true,
+    ticketNumber,
+    direct: true,
+    detailsPending: true,
+  });
 }
 
 export default {
