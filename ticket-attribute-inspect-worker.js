@@ -13,7 +13,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
-  return !!origin && ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
+  return !origin || ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
 }
 
 function getNinjaBaseUrl(regionValue) {
@@ -67,7 +67,7 @@ async function getUserAccessToken(env) {
 }
 
 async function inspectAttributes(request, env) {
-  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
+  if (!['GET', 'POST'].includes(request.method)) return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
 
   const auth = await getUserAccessToken(env);
@@ -90,7 +90,7 @@ async function inspectAttributes(request, env) {
     ticketFormId: ticket.ticketFormId ?? null,
     attributeValues: ticket.attributeValues ?? null,
     attributeValueType: Array.isArray(ticket.attributeValues) ? 'array' : typeof ticket.attributeValues,
-    build: '2026-07-14-ninja-ticket-attribute-inspection-v1',
+    build: '2026-07-14-ninja-ticket-attribute-inspection-v2',
   }, response.ok ? 200 : 502);
 }
 
