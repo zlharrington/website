@@ -81,9 +81,9 @@ async function validateTicket(request, env) {
   if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
 
   const probePayload = {
-    subject: 'Website integration validation - Default form probe',
+    subject: 'Website integration validation - Default ticketForm probe',
     status: 'OPEN',
-    form: 'Default',
+    ticketForm: 'Default',
   };
 
   let response;
@@ -111,10 +111,10 @@ async function validateTicket(request, env) {
     validationOnly: !response.ok,
     ticketCreated: response.ok,
     ticketId,
-    payloadVersion: 'subject-open-form-name-v1',
+    payloadVersion: 'subject-open-ticket-form-name-v1',
     status: response.status,
     bodyPreview: safeLine(raw),
-    build: '2026-07-14-ninja-ticket-default-form-name-probe-v1',
+    build: '2026-07-14-ninja-ticket-default-ticket-form-name-probe-v1',
   });
 }
 
