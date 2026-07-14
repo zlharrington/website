@@ -20,7 +20,7 @@ export async function onRequestPost(context) {
   const { request, env } = context;
 
   if (!env.RESEND_API_KEY) {
-    return json({ ok: false, error: 'Email service is not configured.' }, 503);
+    return json({ ok: false, error: 'Email service is not configured. Add RESEND_API_KEY to the Cloudflare Pages Production environment and redeploy.' }, 503);
   }
 
   let payload;
@@ -118,8 +118,21 @@ export async function onRequestPost(context) {
   });
 
   if (!response.ok) {
-    console.error('Resend error:', await response.text());
-    return json({ ok: false, error: 'Your message could not be sent. Please try again or call us.' }, 502);
+    let providerMessage = '';
+    try {
+      const providerError = await response.json();
+      providerMessage = clean(providerError.message || providerError.error?.message || providerError.name, 300);
+      console.error('Resend error:', response.status, providerError);
+    } catch {
+      providerMessage = clean(await response.text(), 300);
+      console.error('Resend error:', response.status, providerMessage);
+    }
+
+    const safeMessage = providerMessage
+      ? `Email provider error: ${providerMessage}`
+      : `Email provider rejected the request with status ${response.status}.`;
+
+    return json({ ok: false, error: safeMessage }, 502);
   }
 
   return json({ ok: true });
