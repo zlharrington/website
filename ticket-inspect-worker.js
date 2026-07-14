@@ -9,7 +9,7 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v3';
+const BUILD = '2026-07-14-ninja-direct-ticket-v4';
 const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const TICKET_FORM_ID = 1;
 const INTERNAL_CLIENT_ID = 1;
@@ -18,6 +18,7 @@ const json = (data, status = 200) => new Response(JSON.stringify({ ...data, buil
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
 const singleLine = (value, max = 200) => clean(value, max).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
 const isEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const normalizeName = value => singleLine(value, 200).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
@@ -81,6 +82,72 @@ async function readJson(request) {
   try { return await request.json(); } catch { return null; }
 }
 
+function buildTicketDetails(data) {
+  return [
+    'HARRINGTON IT SUPPORT REQUEST',
+    '',
+    `Name: ${data.name}`,
+    `Business: ${data.company}`,
+    `Email: ${data.email}`,
+    `Phone: ${data.phone || 'Not provided'}`,
+    `Requested priority: ${data.priority}`,
+    `Category: ${data.category}`,
+    `Affected device: ${data.affectedDevice || 'Not provided'}`,
+    `Best contact time: ${data.contactTime || 'Not provided'}`,
+    '',
+    'SUMMARY',
+    data.summary,
+    '',
+    'DETAILS',
+    data.description,
+  ].join('\n');
+}
+
+async function findClientId(auth, company) {
+  const target = normalizeName(company);
+  if (!target) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+
+  try {
+    const response = await fetch(`${auth.baseUrl}/v2/organizations?pageSize=1000`, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
+    });
+    if (!response.ok) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    const organizations = await response.json();
+    if (!Array.isArray(organizations)) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+
+    const exact = organizations.find(org => normalizeName(org?.name) === target && Number.isFinite(Number(org?.id)));
+    if (!exact) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    return { clientId: Number(exact.id), matched: true, organizationName: singleLine(exact.name, 200) };
+  } catch {
+    return { clientId: INTERNAL_CLIENT_ID, matched: false };
+  }
+}
+
+async function addTicketComment(auth, ticketId, details) {
+  try {
+    const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/${encodeURIComponent(ticketId)}/comment`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${auth.accessToken}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ body: details, public: false }),
+    });
+    const raw = await response.text();
+    let result = {};
+    try { result = JSON.parse(raw); } catch { result = {}; }
+    return {
+      added: response.ok,
+      status: response.status,
+      reason: singleLine(result.reason || result.resultCode || result.errorMessage || '', 400),
+    };
+  } catch {
+    return { added: false, status: 0, reason: 'Comment request failed.' };
+  }
+}
+
 async function createWebsiteTicket(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
@@ -109,9 +176,10 @@ async function createWebsiteTicket(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, auth.status);
 
+  const organization = await findClientId(auth, data.company);
   const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
   const ninjaPayload = {
-    clientId: INTERNAL_CLIENT_ID,
+    clientId: organization.clientId,
     subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
     status: 'OPEN',
     type: 'PROBLEM',
@@ -151,12 +219,20 @@ async function createWebsiteTicket(request, env) {
   }
 
   const ticketNumber = result.id ?? result.ticketId ?? result.ticket?.id ?? null;
+  const comment = ticketNumber
+    ? await addTicketComment(auth, ticketNumber, buildTicketDetails(data))
+    : { added: false, status: 0, reason: 'Ticket ID was not returned.' };
+
   return json({
     ok: true,
     ticketNumber,
     direct: true,
-    detailsPending: true,
-    clientId: INTERNAL_CLIENT_ID,
+    clientId: organization.clientId,
+    organizationMatched: organization.matched,
+    organizationName: organization.organizationName || 'Internal Infrastructure',
+    detailsAdded: comment.added,
+    commentStatus: comment.status,
+    commentReason: comment.reason,
   });
 }
 
