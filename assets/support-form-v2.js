@@ -22,20 +22,16 @@
       body: JSON.stringify(payload),
     });
 
-    const raw = await response.text();
     let result = {};
     try {
-      result = raw ? JSON.parse(raw) : {};
+      result = await response.json();
     } catch {
       result = {};
     }
 
     if (!response.ok || !result.ok) {
-      const detail = result.error || raw.slice(0, 240) || 'No response body';
-      throw new Error(`Support request failed (${response.status}): ${detail}`);
+      throw new Error(result.error || 'Your message could not be sent. Please try again.');
     }
-
-    return result;
   };
 
   const setBusy = (button, busy, busyText) => {
