@@ -63,12 +63,14 @@ async function getUserAccessToken(env) {
   return { accessToken: result.access_token, baseUrl };
 }
 
+function allowedOrigin(request) {
+  const origin = request.headers.get('origin');
+  return !!origin && ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
+}
+
 async function validateTicket(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
-  const origin = request.headers.get('origin');
-  if (!origin || !['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin)) {
-    return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  }
+  if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
 
   let auth;
   try {
@@ -110,10 +112,62 @@ async function validateTicket(request, env) {
   });
 }
 
+async function discoverTicketForms(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405);
+  if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
+
+  let auth;
+  try {
+    auth = await getUserAccessToken(env);
+  } catch {
+    return json({ ok: false, error: 'Could not reach NinjaOne authentication.' }, 502);
+  }
+  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
+
+  const paths = [
+    '/v2/ticketing/forms',
+    '/v2/ticketing/ticket-forms',
+    '/v2/ticketing/ticketForms',
+    '/v2/ticketing/form',
+    '/v2/ticketing/forms?pageSize=100',
+    '/v2/ticketing/ticket-forms?pageSize=100',
+  ];
+
+  const results = [];
+  for (const path of paths) {
+    try {
+      const response = await fetch(`${auth.baseUrl}${path}`, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${auth.accessToken}`,
+          accept: 'application/json',
+        },
+      });
+      const raw = await response.text();
+      results.push({
+        path,
+        status: response.status,
+        contentType: safeLine(response.headers.get('content-type') || '', 120),
+        bodyPreview: safeLine(raw, 2000),
+      });
+    } catch {
+      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
+    }
+  }
+
+  return json({
+    ok: true,
+    readOnly: true,
+    results,
+    build: '2026-07-14-ninja-ticket-form-discovery-v1',
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/api/ninja-user-ticket-validation') return validateTicket(request, env);
+    if (url.pathname === '/api/ninja-ticket-form-discovery') return discoverTicketForms(request, env);
     return oauthWorker.fetch(request, env, ctx);
   },
 };
