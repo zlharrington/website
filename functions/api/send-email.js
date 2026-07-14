@@ -1,4 +1,4 @@
-const BUILD_VERSION = '2026-07-13-rmm-routing-v2';
+const BUILD_VERSION = '2026-07-13-rmm-routing-v3';
 
 const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD_VERSION }), {
   status,
@@ -130,7 +130,7 @@ export async function onRequestPost(context) {
     return json({ ok: false, error: resendMessage ? `Email service error: ${resendMessage}` : 'Your message could not be sent. Please try again or call us.' }, 502);
   }
 
-  return json({ ok: true, route: type === 'ticket' ? 'rmm-backend' : 'general-contact' });
+  return json({ ok: true, route: type === 'ticket' ? 'rmm-backend' : 'general-contact', recipient: to });
 }
 
 export function onRequest() {
