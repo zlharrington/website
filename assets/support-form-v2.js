@@ -16,7 +16,7 @@
   const clean = value => (value || '').trim();
 
   const sendForm = async (payload) => {
-    const response = await fetch('/api/submit-support-ticket', {
+    const response = await fetch('/api/send-email', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
@@ -32,7 +32,7 @@
 
     if (!response.ok || !result.ok) {
       const detail = result.error || raw.slice(0, 240) || 'No response body';
-      throw new Error(`Support endpoint failed (${response.status}): ${detail}`);
+      throw new Error(`Support request failed (${response.status}): ${detail}`);
     }
 
     return result;
@@ -57,6 +57,7 @@
   const buildTicket = () => {
     const data = new FormData(ticketForm);
     const ticket = {
+      type: 'ticket',
       name: clean(data.get('name')),
       company: clean(data.get('company')),
       email: clean(data.get('email')),
@@ -106,11 +107,9 @@
       if (ticketStatus) ticketStatus.textContent = 'Submitting your support request…';
 
       try {
-        const result = await sendForm(ticket);
+        await sendForm(ticket);
         ticketForm.reset();
-        if (ticketStatus) {
-          ticketStatus.textContent = `Your support request has been submitted. Routed to ${result.recipient || 'unknown recipient'} via ${result.build || 'unknown build'}.`;
-        }
+        if (ticketStatus) ticketStatus.textContent = 'Your support request has been submitted.';
       } catch (error) {
         if (ticketStatus) ticketStatus.textContent = error.message;
       } finally {
