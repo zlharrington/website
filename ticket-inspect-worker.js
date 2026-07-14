@@ -9,10 +9,9 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v4';
+const BUILD = '2026-07-14-ninja-direct-ticket-v5-blank-org';
 const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const TICKET_FORM_ID = 1;
-const INTERNAL_CLIENT_ID = 1;
 
 const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD }), { status, headers: HEADERS });
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
@@ -103,24 +102,24 @@ function buildTicketDetails(data) {
   ].join('\n');
 }
 
-async function findClientId(auth, company) {
+async function findOrganization(auth, company) {
   const target = normalizeName(company);
-  if (!target) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+  if (!target) return { clientId: null, matched: false };
 
   try {
     const response = await fetch(`${auth.baseUrl}/v2/organizations?pageSize=1000`, {
       method: 'GET',
       headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
     });
-    if (!response.ok) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    if (!response.ok) return { clientId: null, matched: false };
     const organizations = await response.json();
-    if (!Array.isArray(organizations)) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    if (!Array.isArray(organizations)) return { clientId: null, matched: false };
 
     const exact = organizations.find(org => normalizeName(org?.name) === target && Number.isFinite(Number(org?.id)));
-    if (!exact) return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    if (!exact) return { clientId: null, matched: false };
     return { clientId: Number(exact.id), matched: true, organizationName: singleLine(exact.name, 200) };
   } catch {
-    return { clientId: INTERNAL_CLIENT_ID, matched: false };
+    return { clientId: null, matched: false };
   }
 }
 
@@ -176,10 +175,10 @@ async function createWebsiteTicket(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, auth.status);
 
-  const organization = await findClientId(auth, data.company);
+  const organization = await findOrganization(auth, data.company);
   const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
   const ninjaPayload = {
-    clientId: organization.clientId,
+    ...(organization.clientId ? { clientId: organization.clientId } : {}),
     subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
     status: 'OPEN',
     type: 'PROBLEM',
@@ -215,6 +214,7 @@ async function createWebsiteTicket(request, env) {
       error: 'Your ticket could not be created. Please try again or call Harrington IT.',
       providerStatus: response.status,
       providerReason: singleLine(result.reason || result.resultCode || result.errorMessage || '', 500),
+      blankOrganizationAttempted: !organization.matched,
     }, 502);
   }
 
@@ -229,7 +229,7 @@ async function createWebsiteTicket(request, env) {
     direct: true,
     clientId: organization.clientId,
     organizationMatched: organization.matched,
-    organizationName: organization.organizationName || 'Internal Infrastructure',
+    organizationName: organization.organizationName || null,
     detailsAdded: comment.added,
     commentStatus: comment.status,
     commentReason: comment.reason,
