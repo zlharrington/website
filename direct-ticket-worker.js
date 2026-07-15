@@ -9,7 +9,6 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-hardened-public-ticket-v1';
 const MAX_BODY_BYTES = 20_000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 600;
@@ -17,13 +16,17 @@ const DEFAULT_WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
 const DEFAULT_TICKET_FORM_ID = 1;
 const DEFAULT_WEB_TICKET_CLIENT_ID = 2;
 
-const json = (data, status = 200, extraHeaders = {}) => new Response(JSON.stringify({ ...data, build: BUILD }), {
+const json = (data, status = 200, extraHeaders = {}) => new Response(JSON.stringify(data), {
   status,
   headers: { ...HEADERS, ...extraHeaders },
 });
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
 const singleLine = (value, max = 200) => clean(value, max).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
 const isEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const positiveInteger = (value) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
@@ -49,13 +52,9 @@ async function readJson(request) {
     return { error: json({ ok: false, error: 'Unsupported content type.' }, 415) };
   }
   const declaredLength = Number(request.headers.get('content-length') || 0);
-  if (declaredLength > MAX_BODY_BYTES) {
-    return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
-  }
+  if (declaredLength > MAX_BODY_BYTES) return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
   const raw = await request.text();
-  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
-    return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
-  }
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
   try {
     return { payload: JSON.parse(raw) };
   } catch {
@@ -97,16 +96,11 @@ async function getUserAccessToken(env) {
         'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json',
       },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: env.NINJA_REFRESH_TOKEN,
-      }).toString(),
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: env.NINJA_REFRESH_TOKEN }).toString(),
     });
     const raw = await response.text();
     const result = parseTokenResponse(raw, response.headers.get('content-type') || '');
-    if (!response.ok || !result.access_token) {
-      return { error: singleLine(result.error_description || result.error || `Refresh failed with status ${response.status}.`, 300), status: 502 };
-    }
+    if (!response.ok || !result.access_token) return { error: 'NinjaOne authentication failed.', status: 502 };
     return { accessToken: result.access_token, baseUrl };
   } catch {
     return { error: 'Could not reach NinjaOne authentication.', status: 502 };
@@ -115,8 +109,7 @@ async function getUserAccessToken(env) {
 
 function buildTicketDetails(data) {
   return [
-    'HARRINGTON IT SUPPORT REQUEST',
-    '',
+    'HARRINGTON IT SUPPORT REQUEST', '',
     `Name: ${data.name}`,
     `Business: ${data.company}`,
     `Email: ${data.email}`,
@@ -125,36 +118,32 @@ function buildTicketDetails(data) {
     `Category: ${data.category}`,
     `Affected device: ${data.affectedDevice || 'Not provided'}`,
     `Best contact time: ${data.contactTime || 'Not provided'}`,
-    '',
-    'SUMMARY',
-    data.summary,
-    '',
-    'DETAILS',
-    data.description,
+    '', 'SUMMARY', data.summary, '', 'DETAILS', data.description,
   ].join('\n');
 }
 
 async function addTicketComment(auth, ticketId, details) {
   try {
     const form = new FormData();
-    form.append(
-      'comment',
-      new Blob([JSON.stringify({ body: details, public: false })], { type: 'application/json' }),
-      'comment.json',
-    );
-
+    form.append('comment', new Blob([JSON.stringify({ body: details, public: false })], { type: 'application/json' }), 'comment.json');
     const response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket/${encodeURIComponent(ticketId)}/comment`, {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${auth.accessToken}`,
-        accept: 'application/json',
-      },
+      headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
       body: form,
     });
     return { added: response.ok, status: response.status };
   } catch {
     return { added: false, status: 0 };
   }
+}
+
+function mapPriority(priorityLabel) {
+  return {
+    Low: { priority: 'LOW', severity: 'MINOR' },
+    Normal: { priority: 'MEDIUM', severity: 'MODERATE' },
+    High: { priority: 'HIGH', severity: 'MAJOR' },
+    Critical: { priority: 'URGENT', severity: 'CRITICAL' },
+  }[priorityLabel] || { priority: 'MEDIUM', severity: 'MODERATE' };
 }
 
 async function createWebsiteTicket(request, env) {
@@ -189,17 +178,22 @@ async function createWebsiteTicket(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, auth.status);
 
-  const clientId = Number(env.WEB_TICKET_CLIENT_ID || DEFAULT_WEB_TICKET_CLIENT_ID);
-  const ticketFormId = Number(env.NINJA_TICKET_FORM_ID || DEFAULT_TICKET_FORM_ID);
+  const clientId = positiveInteger(env.WEB_TICKET_CLIENT_ID || DEFAULT_WEB_TICKET_CLIENT_ID);
+  const ticketFormId = positiveInteger(env.NINJA_TICKET_FORM_ID || DEFAULT_TICKET_FORM_ID);
   const requesterUid = singleLine(env.NINJA_WEBSITE_REQUESTER_UID || DEFAULT_WEBSITE_REQUESTER_UID, 100);
+  if (!clientId || !ticketFormId || !requesterUid) {
+    return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, 503);
+  }
+
   const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
+  const mapped = mapPriority(priorityLabel);
   const ninjaPayload = {
     clientId,
     subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
     status: 'OPEN',
     type: 'PROBLEM',
-    priority: 'MEDIUM',
-    severity: 'MODERATE',
+    priority: mapped.priority,
+    severity: mapped.severity,
     ticketFormId,
     requesterUid,
   };
@@ -222,14 +216,10 @@ async function createWebsiteTicket(request, env) {
   const raw = await response.text();
   let result = {};
   try { result = JSON.parse(raw); } catch { result = {}; }
-  if (!response.ok) {
-    return json({ ok: false, error: 'Your ticket could not be created. Please try again or call Harrington IT.' }, 502);
-  }
+  if (!response.ok) return json({ ok: false, error: 'Your ticket could not be created. Please try again or call Harrington IT.' }, 502);
 
   const ticketNumber = result.id ?? result.ticketId ?? result.ticket?.id ?? null;
-  const comment = ticketNumber
-    ? await addTicketComment(auth, ticketNumber, buildTicketDetails(data))
-    : { added: false, status: 0 };
+  const comment = ticketNumber ? await addTicketComment(auth, ticketNumber, buildTicketDetails(data)) : { added: false, status: 0 };
 
   return json({
     ok: true,
