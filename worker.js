@@ -1,4 +1,4 @@
-const BUILD_VERSION = '2026-07-14-ninja-ticket-validation-v1';
+const BUILD_VERSION = '2026-07-14-production-forms-v2';
 const MAX_BODY_BYTES = 20_000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 600;
@@ -87,147 +87,6 @@ async function readJsonBody(request) {
   } catch {
     return { error: json({ ok: false, error: 'Invalid request.' }, 400) };
   }
-}
-
-function getNinjaBaseUrl(regionValue) {
-  const region = singleLine(regionValue, 20).toLowerCase();
-  const regionHosts = {
-    us: 'https://app.ninjarmm.com',
-    us2: 'https://us2.ninjarmm.com',
-    ca: 'https://ca.ninjarmm.com',
-    eu: 'https://eu.ninjarmm.com',
-    uk: 'https://uk.ninjarmm.com',
-    au: 'https://au.ninjarmm.com',
-  };
-  return regionHosts[region] || null;
-}
-
-async function getNinjaToken(env) {
-  if (!env.NINJA_CLIENT_ID || !env.NINJA_CLIENT_SECRET || !env.NINJA_REGION) {
-    return { error: 'NinjaOne credentials are not fully configured.', status: 503 };
-  }
-  const baseUrl = getNinjaBaseUrl(env.NINJA_REGION);
-  if (!baseUrl) return { error: 'NinjaOne region is not recognized.', status: 400 };
-
-  const credentials = btoa(`${env.NINJA_CLIENT_ID}:${env.NINJA_CLIENT_SECRET}`);
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    scope: 'monitoring management',
-  });
-
-  let tokenResponse;
-  try {
-    tokenResponse = await fetch(`${baseUrl}/ws/oauth/token`, {
-      method: 'POST',
-      headers: {
-        authorization: `Basic ${credentials}`,
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json',
-      },
-      body: body.toString(),
-    });
-  } catch {
-    return { error: 'Could not reach NinjaOne.', status: 502 };
-  }
-
-  let tokenResult = {};
-  try {
-    tokenResult = await tokenResponse.json();
-  } catch {
-    tokenResult = {};
-  }
-
-  if (!tokenResponse.ok || !tokenResult.access_token) {
-    return {
-      error: singleLine(tokenResult.error_description || tokenResult.error || 'Authentication was rejected.', 240),
-      status: 502,
-      providerStatus: tokenResponse.status,
-    };
-  }
-
-  return { token: tokenResult.access_token, baseUrl, tokenResult };
-}
-
-async function testNinjaAuth(request, env) {
-  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
-  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  const auth = await getNinjaToken(env);
-  if (auth.error) return json({ ok: false, authenticated: false, status: auth.providerStatus || auth.status, error: auth.error }, auth.status);
-  return json({
-    ok: true,
-    authenticated: true,
-    region: singleLine(env.NINJA_REGION, 20).toLowerCase(),
-    tokenType: singleLine(auth.tokenResult.token_type || 'Bearer', 30),
-    expiresIn: Number(auth.tokenResult.expires_in) || null,
-    scope: singleLine(auth.tokenResult.scope || 'monitoring management', 200),
-  });
-}
-
-async function probeNinjaTicketing(request, env) {
-  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
-  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  const auth = await getNinjaToken(env);
-  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
-
-  const candidates = [
-    '/v2/ticketing/tickets?pageSize=1',
-    '/v2/ticketing/ticket',
-    '/v2/tickets?pageSize=1',
-    '/v2/organizations?pageSize=1',
-  ];
-  const results = [];
-  for (const path of candidates) {
-    try {
-      const response = await fetch(`${auth.baseUrl}${path}`, {
-        method: 'GET',
-        headers: { authorization: `Bearer ${auth.token}`, accept: 'application/json' },
-      });
-      const raw = await response.text();
-      results.push({
-        path,
-        status: response.status,
-        contentType: singleLine(response.headers.get('content-type') || '', 120),
-        bodyPreview: singleLine(raw, 180),
-      });
-    } catch {
-      results.push({ path, status: 0, bodyPreview: 'Request failed.' });
-    }
-  }
-  return json({ ok: true, readOnly: true, results });
-}
-
-async function probeNinjaTicketValidation(request, env) {
-  if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed.' }, 405, { allow: 'POST' });
-  if (!isAllowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  const auth = await getNinjaToken(env);
-  if (auth.error) return json({ ok: false, error: auth.error }, auth.status);
-
-  let response;
-  try {
-    response = await fetch(`${auth.baseUrl}/v2/ticketing/ticket`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${auth.token}`,
-        accept: 'application/json',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-  } catch {
-    return json({ ok: false, error: 'Could not reach the NinjaOne ticket endpoint.' }, 502);
-  }
-
-  const raw = await response.text();
-  return json({
-    ok: true,
-    validationOnly: true,
-    ticketCreated: response.ok,
-    path: '/v2/ticketing/ticket',
-    status: response.status,
-    allow: singleLine(response.headers.get('allow') || '', 100),
-    contentType: singleLine(response.headers.get('content-type') || '', 120),
-    bodyPreview: singleLine(raw, 1200),
-  });
 }
 
 async function sendEmail(request, env) {
@@ -323,18 +182,9 @@ async function sendEmail(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    let response;
-    if (url.pathname === '/api/send-email') {
-      response = await sendEmail(request, env);
-    } else if (url.pathname === '/api/ninja-auth-test') {
-      response = await testNinjaAuth(request, env);
-    } else if (url.pathname === '/api/ninja-ticketing-probe') {
-      response = await probeNinjaTicketing(request, env);
-    } else if (url.pathname === '/api/ninja-ticket-validation') {
-      response = await probeNinjaTicketValidation(request, env);
-    } else {
-      response = await env.ASSETS.fetch(request);
-    }
+    const response = url.pathname === '/api/send-email'
+      ? await sendEmail(request, env)
+      : await env.ASSETS.fetch(request);
     return withSecurityHeaders(response);
   },
 };

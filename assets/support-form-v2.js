@@ -30,13 +30,7 @@
     }
 
     if (!response.ok || !result.ok) {
-      const diagnostics = [
-        result.providerStatus ? `NinjaOne status ${result.providerStatus}` : '',
-        result.providerReason || '',
-        result.build ? `Build ${result.build}` : '',
-      ].filter(Boolean).join(' — ');
-      const message = result.error || 'Your message could not be sent. Please try again.';
-      throw new Error(diagnostics ? `${message} (${diagnostics})` : message);
+      throw new Error(result.error || 'Your message could not be sent. Please try again.');
     }
 
     return result;
