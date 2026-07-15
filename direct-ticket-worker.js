@@ -159,20 +159,26 @@ async function createWebsiteTicket(request, env) {
   if (singleLine(payload.website, 200)) return json({ ok: true });
 
   const data = {
-    name: singleLine(payload.name, 120),
-    company: singleLine(payload.company, 160),
+    name: singleLine(payload.name ?? payload.fullName, 120),
+    company: singleLine(payload.company ?? payload.business, 160),
     email: singleLine(payload.email, 254).toLowerCase(),
     phone: singleLine(payload.phone, 60),
-    priority: singleLine(payload.priority, 100),
-    category: singleLine(payload.category, 100),
-    affectedDevice: singleLine(payload.affected_device, 160),
-    summary: singleLine(payload.summary, 120),
-    description: clean(payload.description, 5000),
-    contactTime: singleLine(payload.contact_time, 160),
+    priority: singleLine(payload.priority, 100) || 'Normal — Work is affected, but a workaround exists',
+    category: singleLine(payload.category ?? payload.issueCategory, 100) || 'Other',
+    affectedDevice: singleLine(payload.affected_device ?? payload.affectedDevice, 160),
+    summary: singleLine(payload.summary ?? payload.subject, 120),
+    description: clean(payload.description ?? payload.message, 5000),
+    contactTime: singleLine(payload.contact_time ?? payload.contactTime, 160),
   };
 
-  if (!data.name || !data.company || !isEmail(data.email) || !data.priority || !data.category || !data.summary || !data.description) {
-    return json({ ok: false, error: 'Please complete all required ticket fields.' }, 400);
+  const missing = [];
+  if (!data.name) missing.push('name');
+  if (!data.company) missing.push('business name');
+  if (!isEmail(data.email)) missing.push('valid email address');
+  if (!data.summary) missing.push('short summary');
+  if (!data.description) missing.push('issue details');
+  if (missing.length) {
+    return json({ ok: false, error: `Please complete: ${missing.join(', ')}.` }, 400);
   }
 
   const auth = await getUserAccessToken(env);
