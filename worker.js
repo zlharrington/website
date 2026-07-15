@@ -1,4 +1,3 @@
-const BUILD_VERSION = '2026-07-14-production-forms-v2';
 const MAX_BODY_BYTES = 20_000;
 const RATE_LIMIT_MAX = 8;
 const RATE_LIMIT_WINDOW_SECONDS = 600;
@@ -17,7 +16,7 @@ const SECURITY_HEADERS = {
   'cross-origin-opener-policy': 'same-origin',
 };
 
-const json = (data, status = 200, extraHeaders = {}) => new Response(JSON.stringify({ ...data, build: BUILD_VERSION }), {
+const json = (data, status = 200, extraHeaders = {}) => new Response(JSON.stringify(data), {
   status,
   headers: {
     'content-type': 'application/json; charset=utf-8',
