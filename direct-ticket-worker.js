@@ -1,4 +1,4 @@
-import baseWorker from './ticket-probe-worker.js';
+import baseWorker from './worker.js';
 
 const HEADERS = {
   'cache-control': 'no-store',
@@ -9,20 +9,58 @@ const HEADERS = {
   'x-robots-tag': 'noindex, nofollow',
 };
 
-const BUILD = '2026-07-14-ninja-direct-ticket-v7-multipart-comment';
-const WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
-const TICKET_FORM_ID = 1;
-const WEB_TICKET_CLIENT_ID = 2;
+const BUILD = '2026-07-14-hardened-public-ticket-v1';
+const MAX_BODY_BYTES = 20_000;
+const RATE_LIMIT_MAX = 8;
+const RATE_LIMIT_WINDOW_SECONDS = 600;
+const DEFAULT_WEBSITE_REQUESTER_UID = '025624f1-7fb9-4781-9c60-38abad4c9e14';
+const DEFAULT_TICKET_FORM_ID = 1;
+const DEFAULT_WEB_TICKET_CLIENT_ID = 2;
 
-const json = (data, status = 200) => new Response(JSON.stringify({ ...data, build: BUILD }), { status, headers: HEADERS });
+const json = (data, status = 200, extraHeaders = {}) => new Response(JSON.stringify({ ...data, build: BUILD }), {
+  status,
+  headers: { ...HEADERS, ...extraHeaders },
+});
 const clean = (value, max = 2000) => String(value ?? '').trim().slice(0, max);
 const singleLine = (value, max = 200) => clean(value, max).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ');
-const normalizeName = value => singleLine(value, 200).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const isEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 function allowedOrigin(request) {
   const origin = request.headers.get('origin');
   return !!origin && ['https://harringtonit.com', 'https://www.harringtonit.com'].includes(origin);
+}
+
+async function isRateLimited(request) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const windowId = Math.floor(Date.now() / (RATE_LIMIT_WINDOW_SECONDS * 1000));
+  const key = new Request(`https://rate-limit.internal/ticket/${windowId}/${encodeURIComponent(ip)}`);
+  const cache = caches.default;
+  const cached = await cache.match(key);
+  const count = cached ? Number(await cached.text()) || 0 : 0;
+  if (count >= RATE_LIMIT_MAX) return true;
+  await cache.put(key, new Response(String(count + 1), {
+    headers: { 'cache-control': `max-age=${RATE_LIMIT_WINDOW_SECONDS}` },
+  }));
+  return false;
+}
+
+async function readJson(request) {
+  if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) {
+    return { error: json({ ok: false, error: 'Unsupported content type.' }, 415) };
+  }
+  const declaredLength = Number(request.headers.get('content-length') || 0);
+  if (declaredLength > MAX_BODY_BYTES) {
+    return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
+  }
+  const raw = await request.text();
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
+    return { error: json({ ok: false, error: 'Request is too large.' }, 413) };
+  }
+  try {
+    return { payload: JSON.parse(raw) };
+  } catch {
+    return { error: json({ ok: false, error: 'Invalid request.' }, 400) };
+  }
 }
 
 function getNinjaBaseUrl(regionValue) {
@@ -75,11 +113,6 @@ async function getUserAccessToken(env) {
   }
 }
 
-async function readJson(request) {
-  if (!(request.headers.get('content-type') || '').toLowerCase().startsWith('application/json')) return null;
-  try { return await request.json(); } catch { return null; }
-}
-
 function buildTicketDetails(data) {
   return [
     'HARRINGTON IT SUPPORT REQUEST',
@@ -101,37 +134,12 @@ function buildTicketDetails(data) {
   ].join('\n');
 }
 
-async function findOrganization(auth, company) {
-  const target = normalizeName(company);
-  if (!target) return { clientId: WEB_TICKET_CLIENT_ID, matched: false, organizationName: 'Web Ticket' };
-
-  try {
-    const response = await fetch(`${auth.baseUrl}/v2/organizations?pageSize=1000`, {
-      method: 'GET',
-      headers: { authorization: `Bearer ${auth.accessToken}`, accept: 'application/json' },
-    });
-    if (!response.ok) return { clientId: WEB_TICKET_CLIENT_ID, matched: false, organizationName: 'Web Ticket' };
-    const organizations = await response.json();
-    if (!Array.isArray(organizations)) return { clientId: WEB_TICKET_CLIENT_ID, matched: false, organizationName: 'Web Ticket' };
-
-    const exact = organizations.find(org => normalizeName(org?.name) === target && Number.isFinite(Number(org?.id)));
-    if (!exact) return { clientId: WEB_TICKET_CLIENT_ID, matched: false, organizationName: 'Web Ticket' };
-    return { clientId: Number(exact.id), matched: true, organizationName: singleLine(exact.name, 200) };
-  } catch {
-    return { clientId: WEB_TICKET_CLIENT_ID, matched: false, organizationName: 'Web Ticket' };
-  }
-}
-
 async function addTicketComment(auth, ticketId, details) {
   try {
     const form = new FormData();
-    const commentPayload = {
-      body: details,
-      public: false,
-    };
     form.append(
       'comment',
-      new Blob([JSON.stringify(commentPayload)], { type: 'application/json' }),
+      new Blob([JSON.stringify({ body: details, public: false })], { type: 'application/json' }),
       'comment.json',
     );
 
@@ -143,23 +151,22 @@ async function addTicketComment(auth, ticketId, details) {
       },
       body: form,
     });
-    const raw = await response.text();
-    let result = {};
-    try { result = JSON.parse(raw); } catch { result = {}; }
-    return {
-      added: response.ok,
-      status: response.status,
-      reason: singleLine(result.reason || result.resultCode || result.errorMessage || '', 400),
-    };
+    return { added: response.ok, status: response.status };
   } catch {
-    return { added: false, status: 0, reason: 'Comment request failed.' };
+    return { added: false, status: 0 };
   }
 }
 
 async function createWebsiteTicket(request, env) {
   if (!allowedOrigin(request)) return json({ ok: false, error: 'Request origin is not allowed.' }, 403);
-  const payload = await readJson(request);
-  if (!payload) return json({ ok: false, error: 'Invalid request.' }, 400);
+  if (await isRateLimited(request)) {
+    return json({ ok: false, error: 'Too many submissions. Please wait a few minutes and try again.' }, 429, {
+      'retry-after': String(RATE_LIMIT_WINDOW_SECONDS),
+    });
+  }
+
+  const { payload, error } = await readJson(request);
+  if (error) return error;
   if (singleLine(payload.website, 200)) return json({ ok: true });
 
   const data = {
@@ -182,17 +189,19 @@ async function createWebsiteTicket(request, env) {
   const auth = await getUserAccessToken(env);
   if (auth.error) return json({ ok: false, error: 'Ticket service is temporarily unavailable.' }, auth.status);
 
-  const organization = await findOrganization(auth, data.company);
+  const clientId = Number(env.WEB_TICKET_CLIENT_ID || DEFAULT_WEB_TICKET_CLIENT_ID);
+  const ticketFormId = Number(env.NINJA_TICKET_FORM_ID || DEFAULT_TICKET_FORM_ID);
+  const requesterUid = singleLine(env.NINJA_WEBSITE_REQUESTER_UID || DEFAULT_WEBSITE_REQUESTER_UID, 100);
   const priorityLabel = data.priority.split(' — ')[0] || 'Normal';
   const ninjaPayload = {
-    clientId: organization.clientId,
+    clientId,
     subject: `${priorityLabel} - ${data.company} - ${data.summary}`.slice(0, 255),
     status: 'OPEN',
     type: 'PROBLEM',
     priority: 'MEDIUM',
     severity: 'MODERATE',
-    ticketFormId: TICKET_FORM_ID,
-    requesterUid: WEBSITE_REQUESTER_UID,
+    ticketFormId,
+    requesterUid,
   };
 
   let response;
@@ -214,29 +223,20 @@ async function createWebsiteTicket(request, env) {
   let result = {};
   try { result = JSON.parse(raw); } catch { result = {}; }
   if (!response.ok) {
-    return json({
-      ok: false,
-      error: 'Your ticket could not be created. Please try again or call Harrington IT.',
-      providerStatus: response.status,
-      providerReason: singleLine(result.reason || result.resultCode || result.errorMessage || '', 500),
-    }, 502);
+    return json({ ok: false, error: 'Your ticket could not be created. Please try again or call Harrington IT.' }, 502);
   }
 
   const ticketNumber = result.id ?? result.ticketId ?? result.ticket?.id ?? null;
   const comment = ticketNumber
     ? await addTicketComment(auth, ticketNumber, buildTicketDetails(data))
-    : { added: false, status: 0, reason: 'Ticket ID was not returned.' };
+    : { added: false, status: 0 };
 
   return json({
     ok: true,
     ticketNumber,
     direct: true,
-    clientId: organization.clientId,
-    organizationMatched: organization.matched,
-    organizationName: organization.organizationName,
+    recipient: 'Web Ticket',
     detailsAdded: comment.added,
-    commentStatus: comment.status,
-    commentReason: comment.reason,
   });
 }
 
@@ -245,8 +245,8 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/send-email' && request.method === 'POST') {
       const clone = request.clone();
-      const payload = await readJson(clone);
-      if (payload?.type === 'ticket') return createWebsiteTicket(request, env);
+      const parsed = await readJson(clone);
+      if (parsed.payload?.type === 'ticket') return createWebsiteTicket(request, env);
     }
     return baseWorker.fetch(request, env, ctx);
   },
