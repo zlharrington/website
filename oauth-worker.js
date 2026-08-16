@@ -3,10 +3,11 @@ import baseWorker from './worker.js';
 const REDIRECT_URI = 'https://harringtonit.com/api/ninja-oauth-callback';
 const OAUTH_SCOPE = 'monitoring management offline_access';
 const STATE_MAX_AGE_SECONDS = 600;
+const INLINE_STYLE_HASH = "'sha256-D+FGSefM80w0xRMMNPgBqnPr455cGVN3Vq20bgvUChc='";
 
 const SECURITY_HEADERS = {
   'cache-control': 'no-store',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+  'content-security-policy': `default-src 'none'; style-src ${INLINE_STYLE_HASH}; base-uri 'none'; frame-ancestors 'none'; form-action 'none'`,
   'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
