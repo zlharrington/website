@@ -1,0 +1,49 @@
+name: Site build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate Astro project
+        run: npm run check
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Verify preserved production routes
+        run: |
+          test -f dist/index.html
+          test -f dist/services.html
+          test -f dist/managed-it-services.html
+          test -f dist/cybersecurity.html
+          test -f dist/microsoft-365.html
+          test -f dist/networking.html
+          test -f dist/backup-disaster-recovery.html
+          test -f dist/it-consulting.html
+          test -f dist/website-support.html
+          test -f dist/support.html
+          test -f dist/privacy.html
+          test -f dist/terms.html
+          test -f dist/404.html
+          test -f dist/assets/site.js
+          test -f dist/sitemap.xml
