@@ -7,23 +7,23 @@ const legacyPages = import.meta.glob('../../*.html', {
   import: 'default',
 }) as Record<string, string>;
 
-const pageNames = [
-  'index',
-  'services',
-  'managed-it-services',
-  'cybersecurity',
-  'microsoft-365',
-  'networking',
-  'backup-disaster-recovery',
-  'it-consulting',
-  'website-support',
-  'support',
-  'privacy',
-  'terms',
-  '404',
-] as const;
-
 export function getStaticPaths() {
+  const pageNames = [
+    'index',
+    'services',
+    'managed-it-services',
+    'cybersecurity',
+    'microsoft-365',
+    'networking',
+    'backup-disaster-recovery',
+    'it-consulting',
+    'website-support',
+    'support',
+    'privacy',
+    'terms',
+    '404',
+  ];
+
   return pageNames.map((page) => ({
     params: { slug: page === 'index' ? undefined : page },
     props: { page },
@@ -31,7 +31,7 @@ export function getStaticPaths() {
 }
 
 interface Props {
-  page: (typeof pageNames)[number];
+  page: string;
 }
 
 const { page } = Astro.props;
