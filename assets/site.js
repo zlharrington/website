@@ -3,15 +3,57 @@
   const nav = document.querySelector('.main-nav');
 
   if (menuButton && nav) {
+    const closeMenu = () => {
+      nav.classList.remove('open');
+      menuButton.setAttribute('aria-expanded', 'false');
+    };
+
     menuButton.addEventListener('click', () => {
       const open = nav.classList.toggle('open');
       menuButton.setAttribute('aria-expanded', String(open));
+    });
+
+    nav.addEventListener('click', event => {
+      if (event.target.closest('a')) closeMenu();
+    });
+
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && nav.classList.contains('open')) {
+        closeMenu();
+        menuButton.focus();
+      }
+    });
+
+    document.addEventListener('click', event => {
+      if (nav.classList.contains('open') && !nav.contains(event.target) && !menuButton.contains(event.target)) {
+        closeMenu();
+      }
     });
   }
 
   document.querySelectorAll('[data-year]').forEach(el => {
     el.textContent = new Date().getFullYear();
   });
+
+  // Mark the active page in the navigation for sighted and assistive-technology users.
+  const currentPath = window.location.pathname.split('/').pop() || 'index.html';
+  document.querySelectorAll('.main-nav a, .footer-links a').forEach(link => {
+    const href = (link.getAttribute('href') || '').split('#')[0];
+    if (href && href === currentPath) link.setAttribute('aria-current', 'page');
+  });
+
+  // Add a compact, site-wide mobile conversion bar without duplicating markup on every page.
+  if (!document.querySelector('.mobile-action-bar')) {
+    const actionBar = document.createElement('nav');
+    actionBar.className = 'mobile-action-bar';
+    actionBar.setAttribute('aria-label', 'Quick actions');
+    const consultationHref = currentPath === 'index.html' ? '#contact' : 'index.html#contact';
+    actionBar.innerHTML = `
+      <a class="mobile-action-call" href="tel:+15093937287" aria-label="Call Harrington IT at 509-393-7287">Call</a>
+      <a class="mobile-action-consult" href="${consultationHref}">Request Consultation</a>
+    `;
+    document.body.appendChild(actionBar);
+  }
 
   const clean = value => (value || '').trim();
 
@@ -38,6 +80,7 @@
 
   const setBusy = (button, busy, busyText) => {
     if (!button) return;
+    button.setAttribute('aria-busy', String(busy));
     if (busy) {
       button.dataset.originalText = button.textContent;
       button.textContent = busyText;
