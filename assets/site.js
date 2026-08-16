@@ -35,8 +35,18 @@
     el.textContent = new Date().getFullYear();
   });
 
-  // Mark the active page in the navigation for sighted and assistive-technology users.
   const currentPath = window.location.pathname.split('/').pop() || 'index.html';
+  const serviceByPath = {
+    'managed-it-services.html': 'Managed IT',
+    'cybersecurity.html': 'Cybersecurity',
+    'microsoft-365.html': 'Microsoft 365',
+    'networking.html': 'Networking & Infrastructure',
+    'backup-disaster-recovery.html': 'Backup & Recovery',
+    'it-consulting.html': 'IT Consulting & Projects',
+    'website-support.html': 'Website Support',
+  };
+
+  // Mark the active page in the navigation for sighted and assistive-technology users.
   document.querySelectorAll('.main-nav a, .footer-links a').forEach(link => {
     const href = (link.getAttribute('href') || '').split('#')[0];
     if (href && href === currentPath) link.setAttribute('aria-current', 'page');
@@ -47,7 +57,10 @@
     const actionBar = document.createElement('nav');
     actionBar.className = 'mobile-action-bar';
     actionBar.setAttribute('aria-label', 'Quick actions');
-    const consultationHref = currentPath === 'index.html' ? '#contact' : 'index.html#contact';
+    const service = serviceByPath[currentPath];
+    const consultationHref = currentPath === 'index.html'
+      ? '#contact'
+      : `index.html${service ? `?service=${encodeURIComponent(service)}` : ''}#contact`;
     actionBar.innerHTML = `
       <a class="mobile-action-call" href="tel:+15093937287" aria-label="Call Harrington IT at 509-393-7287">Call</a>
       <a class="mobile-action-consult" href="${consultationHref}">Request Consultation</a>
@@ -95,12 +108,36 @@
   if (contactForm) {
     const button = contactForm.querySelector('button[type="submit"]');
     const status = contactForm.querySelector('[data-form-status]');
+    const serviceSelect = contactForm.querySelector('[name="service"]');
+
+    if (serviceSelect) {
+      const params = new URLSearchParams(window.location.search);
+      let service = clean(params.get('service'));
+
+      if (!service && document.referrer) {
+        try {
+          const referrerUrl = new URL(document.referrer);
+          if (referrerUrl.origin === window.location.origin) {
+            const referrerPath = referrerUrl.pathname.split('/').pop();
+            service = serviceByPath[referrerPath] || '';
+          }
+        } catch {
+          service = '';
+        }
+      }
+
+      if (service && Array.from(serviceSelect.options).some(option => option.value === service)) {
+        serviceSelect.value = service;
+      }
+    }
 
     contactForm.addEventListener('submit', async event => {
       event.preventDefault();
       if (!contactForm.reportValidity()) return;
 
       const data = new FormData(contactForm);
+      const service = clean(data.get('service')) || 'General IT / Not sure';
+      const message = clean(data.get('message'));
       setBusy(button, true, 'Sending…');
       if (status) status.textContent = 'Sending your message…';
 
@@ -111,7 +148,7 @@
           business: clean(data.get('business')),
           email: clean(data.get('email')),
           phone: clean(data.get('phone')),
-          message: clean(data.get('message')),
+          message: `Service interest: ${service}\n\n${message}`,
           website: clean(data.get('website')),
         });
         contactForm.reset();
