@@ -1,0 +1,40 @@
+---
+import SiteHeader from '../components/SiteHeader.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+
+interface Props {
+  html: string;
+}
+
+const { html } = Astro.props;
+const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+
+if (!headMatch || !bodyMatch) {
+  throw new Error('Legacy page is missing a valid <head> or <body>.');
+}
+
+const headHtml = headMatch[1];
+let bodyHtml = bodyMatch[1];
+
+const skipMatch = bodyHtml.match(/<a\b[^>]*class=["'][^"']*\bskip-link\b[^"']*["'][^>]*>[\s\S]*?<\/a>/i);
+const skipHtml = skipMatch?.[0] ?? '<a class="skip-link" href="#main">Skip to content</a>';
+
+bodyHtml = bodyHtml
+  .replace(skipHtml, '')
+  .replace(/<header\b[^>]*class=["'][^"']*\bsite-header\b[^"']*["'][^>]*>[\s\S]*?<\/header>/i, '')
+  .replace(/<footer\b[^>]*class=["'][^"']*\bsite-footer\b[^"']*["'][^>]*>[\s\S]*?<\/footer>/i, '')
+  .trim();
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <Fragment set:html={headHtml} />
+  </head>
+  <body>
+    <Fragment set:html={skipHtml} />
+    <SiteHeader />
+    <Fragment set:html={bodyHtml} />
+    <SiteFooter />
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "harrington-it-site",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && node scripts/copy-static.mjs",
+    "preview": "astro preview",
+    "check": "astro check",
+    "deploy": "npx wrangler@latest deploy"
+  },
+  "dependencies": {
+    "astro": "7.2.2"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "typescript": "^6.0.3"
+  }
+}

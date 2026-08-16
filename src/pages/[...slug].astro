@@ -1,0 +1,45 @@
+---
+import LegacyPage from '../layouts/LegacyPage.astro';
+
+const legacyPages = import.meta.glob('../../*.html', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>;
+
+export function getStaticPaths() {
+  const pageNames = [
+    'index',
+    'services',
+    'managed-it-services',
+    'cybersecurity',
+    'microsoft-365',
+    'networking',
+    'backup-disaster-recovery',
+    'it-consulting',
+    'website-support',
+    'support',
+    'privacy',
+    'terms',
+    '404',
+  ];
+
+  return pageNames.map((page) => ({
+    params: { slug: page === 'index' ? undefined : page },
+    props: { page },
+  }));
+}
+
+interface Props {
+  page: string;
+}
+
+const { page } = Astro.props;
+const sourceKey = `../../${page}.html`;
+const html = legacyPages[sourceKey];
+
+if (!html) {
+  throw new Error(`Missing legacy source page: ${sourceKey}`);
+}
+---
+<LegacyPage html={html} />
