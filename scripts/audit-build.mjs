@@ -31,6 +31,9 @@ for (const [file, expectedCanonical] of pages) {
 
   if (!/<meta\s+[^>]*name=["']viewport["'][^>]*>/i.test(html)) errors.push(`${label}: missing viewport meta tag.`);
   if (!/<html\s+[^>]*lang=["']en["']/i.test(html)) errors.push(`${label}: missing html lang="en".`);
+  if (!/<link\s+[^>]*rel=["'](?:icon|shortcut icon)["'][^>]*href=["']\/assets\/favicon\.svg["'][^>]*>/i.test(html)) {
+    errors.push(`${label}: missing branded favicon link.`);
+  }
 
   const h1s = [...html.matchAll(/<h1\b/gi)];
   if (h1s.length !== 1) errors.push(`${label}: expected exactly one H1, found ${h1s.length}.`);
@@ -50,6 +53,14 @@ for (const [file, expectedCanonical] of pages) {
   for (const image of html.matchAll(/<img\b([^>]*)>/gi)) {
     if (!/\balt=["'][^"']*["']/i.test(image[1])) errors.push(`${label}: image missing alt attribute: <img${image[1]}>`);
   }
+}
+
+const home = await readFile(join('dist', 'index.html'), 'utf8');
+if (!/"@type"\s*:\s*"WebSite"[\s\S]*?"name"\s*:\s*"Harrington IT"/i.test(home)) {
+  errors.push('dist/index.html: missing WebSite structured data naming Harrington IT.');
+}
+if (!/<meta\s+[^>]*property=["']og:site_name["'][^>]*content=["']Harrington IT["'][^>]*>/i.test(home)) {
+  errors.push('dist/index.html: missing og:site_name for Harrington IT.');
 }
 
 const sitemap = await readFile(join('dist', 'sitemap.xml'), 'utf8');
