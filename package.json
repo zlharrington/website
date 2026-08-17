@@ -10,6 +10,7 @@
     "build": "astro build && node scripts/copy-static.mjs",
     "preview": "astro preview",
     "check": "astro check",
+    "audit": "node scripts/audit-build.mjs",
     "deploy": "npx wrangler@latest deploy"
   },
   "dependencies": {
