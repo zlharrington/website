@@ -35,21 +35,32 @@
     el.textContent = new Date().getFullYear();
   });
 
-  const currentPath = window.location.pathname.split('/').pop() || 'index.html';
+  const normalizePath = pathname => {
+    const segment = pathname.split('/').filter(Boolean).pop() || 'index';
+    return segment.replace(/\.html$/i, '') || 'index';
+  };
+
+  const currentPath = normalizePath(window.location.pathname);
   const serviceByPath = {
-    'managed-it-services.html': 'Managed IT',
-    'cybersecurity.html': 'Cybersecurity',
-    'microsoft-365.html': 'Microsoft 365',
-    'networking.html': 'Networking & Infrastructure',
-    'backup-disaster-recovery.html': 'Backup & Recovery',
-    'it-consulting.html': 'IT Consulting & Projects',
-    'website-support.html': 'Website Support',
+    'managed-it-services': 'Managed IT',
+    'cybersecurity': 'Cybersecurity',
+    'microsoft-365': 'Microsoft 365',
+    'networking': 'Networking & Infrastructure',
+    'backup-disaster-recovery': 'Backup & Recovery',
+    'it-consulting': 'IT Consulting & Projects',
+    'website-support': 'Website Support',
   };
 
   // Mark the active page in the navigation for sighted and assistive-technology users.
   document.querySelectorAll('.main-nav a, .footer-links a').forEach(link => {
-    const href = (link.getAttribute('href') || '').split('#')[0];
-    if (href && href === currentPath) link.setAttribute('aria-current', 'page');
+    const href = link.getAttribute('href') || '';
+    if (!href || href.startsWith('#') || href.startsWith('tel:') || href.startsWith('mailto:')) return;
+    try {
+      const linkPath = normalizePath(new URL(href, window.location.origin).pathname);
+      if (linkPath === currentPath) link.setAttribute('aria-current', 'page');
+    } catch {
+      // Ignore non-URL navigation values.
+    }
   });
 
   // Add a compact, site-wide mobile conversion bar without duplicating markup on every page.
@@ -58,9 +69,9 @@
     actionBar.className = 'mobile-action-bar';
     actionBar.setAttribute('aria-label', 'Quick actions');
     const service = serviceByPath[currentPath];
-    const consultationHref = currentPath === 'index.html'
+    const consultationHref = currentPath === 'index'
       ? '#contact'
-      : `index.html${service ? `?service=${encodeURIComponent(service)}` : ''}#contact`;
+      : `/${service ? `?service=${encodeURIComponent(service)}` : ''}#contact`;
     actionBar.innerHTML = `
       <a class="mobile-action-call" href="tel:+15093937287" aria-label="Call Harrington IT at 509-393-7287">Call</a>
       <a class="mobile-action-consult" href="${consultationHref}">Request Consultation</a>
@@ -118,8 +129,7 @@
         try {
           const referrerUrl = new URL(document.referrer);
           if (referrerUrl.origin === window.location.origin) {
-            const referrerPath = referrerUrl.pathname.split('/').pop();
-            service = serviceByPath[referrerPath] || '';
+            service = serviceByPath[normalizePath(referrerUrl.pathname)] || '';
           }
         } catch {
           service = '';
