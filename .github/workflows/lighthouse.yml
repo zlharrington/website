@@ -1,0 +1,33 @@
+name: Lighthouse quality
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Run Lighthouse audits
+        run: npx --yes @lhci/cli@0.15.x collect --config=./lighthouserc.json
+
+      - name: Enforce Lighthouse thresholds
+        run: npx --yes @lhci/cli@0.15.x assert --config=./lighthouserc.json

@@ -30,7 +30,10 @@ jobs:
       - name: Build static site
         run: npm run build
 
-      - name: Verify preserved production routes
+      - name: Audit generated SEO and accessibility structure
+        run: npm run audit
+
+      - name: Verify preserved production assets
         run: |
           test -f dist/index.html
           test -f dist/services.html
@@ -47,3 +50,4 @@ jobs:
           test -f dist/404.html
           test -f dist/assets/site.js
           test -f dist/sitemap.xml
+          test -f dist/robots.txt
