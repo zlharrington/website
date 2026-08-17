@@ -14,7 +14,14 @@ if (!headMatch || !bodyMatch) {
   throw new Error('Legacy page is missing a valid <head> or <body>.');
 }
 
-const headHtml = headMatch[1];
+// Cloudflare Workers static assets use extensionless HTML URLs by default.
+// Normalize legacy metadata and links during the Astro build so the generated
+// canonicals, internal navigation, sitemap, and edge routing all agree.
+const normalizeProductionUrl = (value: string) => value
+  .replace(/https:\/\/harringtonit\.com\/index\.html/g, 'https://harringtonit.com/')
+  .replace(/https:\/\/harringtonit\.com\/([a-z0-9-]+)\.html/g, 'https://harringtonit.com/$1');
+
+let headHtml = normalizeProductionUrl(headMatch[1]);
 let bodyHtml = bodyMatch[1];
 
 const skipMatch = bodyHtml.match(/<a\b[^>]*class=["'][^"']*\bskip-link\b[^"']*["'][^>]*>[\s\S]*?<\/a>/i);
@@ -24,6 +31,8 @@ bodyHtml = bodyHtml
   .replace(skipHtml, '')
   .replace(/<header\b[^>]*class=["'][^"']*\bsite-header\b[^"']*["'][^>]*>[\s\S]*?<\/header>/i, '')
   .replace(/<footer\b[^>]*class=["'][^"']*\bsite-footer\b[^"']*["'][^>]*>[\s\S]*?<\/footer>/i, '')
+  .replace(/href=(["'])index\.html(?=([?#][^"']*)?\1)/gi, 'href=$1/$2$1')
+  .replace(/href=(["'])([a-z0-9-]+)\.html(?=([?#][^"']*)?\1)/gi, 'href=$1/$2$3$1')
   .trim();
 ---
 <!doctype html>
