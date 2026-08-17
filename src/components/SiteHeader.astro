@@ -1,22 +1,22 @@
 ---
 const currentPath = Astro.url.pathname;
-const isHome = currentPath === '/' || currentPath.endsWith('/index.html');
-const servicesHref = isHome ? '#services' : 'services.html';
-const contactHref = isHome ? '#contact' : 'index.html#contact';
+const isHome = currentPath === '/' || currentPath === '/index.html';
+const servicesHref = isHome ? '#services' : '/services';
+const contactHref = isHome ? '#contact' : '/#contact';
 ---
 <header class="site-header">
   <div class="container nav-wrap">
-    <a class="brand" href="index.html" aria-label="Harrington IT home">
-      <img src="assets/harrington-it-logo.png" alt="Harrington IT" width="304" height="67" decoding="async" fetchpriority="high" />
+    <a class="brand" href="/" aria-label="Harrington IT home">
+      <img src="/assets/harrington-it-logo.png" alt="Harrington IT" width="304" height="67" decoding="async" fetchpriority="high" />
     </a>
-    <button class="menu-toggle" aria-expanded="false" aria-controls="main-nav">
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="main-nav">
       <span class="sr-only">Toggle navigation</span><span></span><span></span><span></span>
     </button>
-    <nav id="main-nav" class="main-nav">
+    <nav id="main-nav" class="main-nav" aria-label="Main navigation">
       <a href={servicesHref}>Services</a>
-      <a href="it-consulting.html">IT Consulting</a>
+      <a href="/it-consulting">IT Consulting</a>
       <a href={contactHref}>Contact</a>
-      <a class="button button-small button-outline" href="support.html">Submit a ticket</a>
+      <a class="button button-small button-outline" href="/support">Submit a ticket</a>
     </nav>
   </div>
 </header>
