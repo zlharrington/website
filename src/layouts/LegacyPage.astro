@@ -24,7 +24,7 @@ const normalizeProductionUrl = (value: string) => value
 let headHtml = normalizeProductionUrl(headMatch[1])
   // Avoid a late web-font swap extending text LCP on slow connections.
   .replace(/([?&]display=)swap\b/gi, '$1optional');
-let bodyHtml = bodyMatch[1];
+let bodyHtml = normalizeProductionUrl(bodyMatch[1]);
 
 const skipMatch = bodyHtml.match(/<a\b[^>]*class=["'][^"']*\bskip-link\b[^"']*["'][^>]*>[\s\S]*?<\/a>/i);
 const skipHtml = skipMatch?.[0] ?? '<a class="skip-link" href="#main">Skip to content</a>';
