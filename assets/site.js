@@ -1,4 +1,22 @@
 (() => {
+  const faviconHref = '/assets/harrington-it-logo.png?v=20260817';
+  let favicon = document.querySelector('link[rel~="icon"]');
+  if (!favicon) {
+    favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    document.head.appendChild(favicon);
+  }
+  favicon.type = 'image/png';
+  favicon.href = faviconHref;
+
+  let appleTouchIcon = document.querySelector('link[rel="apple-touch-icon"]');
+  if (!appleTouchIcon) {
+    appleTouchIcon = document.createElement('link');
+    appleTouchIcon.rel = 'apple-touch-icon';
+    document.head.appendChild(appleTouchIcon);
+  }
+  appleTouchIcon.href = faviconHref;
+
   const menuButton = document.querySelector('.menu-toggle');
   const nav = document.querySelector('.main-nav');
 
